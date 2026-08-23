@@ -386,7 +386,28 @@ Panel {
                              ? trFmt("search.filterIn", currentVault === "" ? tr("vault.all") : currentVault)
                              : tr("search.vaults")
             foreground: root.foreground
+            // Reserve room for the reset button so long queries stay readable.
+            rightPadding: horizontalPadding + Style.space(2)
+                          + (resetButton.visible ? resetButton.width + Style.space(4) : 0)
             onTextChanged: root.query = text
+
+            PanelActionButton {
+              id: resetButton
+              anchors.right: parent.right
+              anchors.rightMargin: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
+              iconText: "\uF00D"                   // times
+              foreground: root.dim
+              hoverColor: root.foreground
+              tooltipText: root.tr("search.reset")
+              visible: searchField.text !== ""
+              onClicked: {
+                searchField.text = ""
+                root.query = ""
+                root.selectedIndex = 0
+                searchField.forceActiveFocus()
+              }
+            }
             Keys.onDownPressed: root.moveCursor(1)
             Keys.onUpPressed: root.moveCursor(-1)
             Keys.onReturnPressed: root.activateRow(-1)

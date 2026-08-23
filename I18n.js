@@ -6,6 +6,7 @@
 
 var catalogs = {
   en: {
+    "search.reset": "Reset search",
     // Session states
     "status.unlocked": "Session unlocked",
     "status.locked": "Session locked",
@@ -96,6 +97,7 @@ var catalogs = {
   },
 
   zh: {
+    "search.reset": "重置搜索",
     // Session states
     "status.unlocked": "会话已解锁",
     "status.locked": "会话已锁定",
@@ -186,6 +188,7 @@ var catalogs = {
   },
 
   fr: {
+    "search.reset": "Réinitialiser la recherche",
     "status.unlocked": "Session déverrouillée",
     "status.locked": "Session verrouillée",
     "status.checking": "Vérification…",

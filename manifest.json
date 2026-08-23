@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ziouf.proton-pass",
   "name": "Proton Pass",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "author": "ziouf",
   "license": "MIT",
   "description": "Proton Pass CLI as a system-wide secret provider: session status in the bar, vault navigation with typed items, field-level detail view, clipboard copy with auto-clear, SSH agent service and lock-on-screen-lock integration.",
