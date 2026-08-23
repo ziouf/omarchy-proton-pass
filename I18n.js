@@ -95,6 +95,96 @@ var catalogs = {
     "unit.seconds": "s"
   },
 
+  zh: {
+    // Session states
+    "status.unlocked": "会话已解锁",
+    "status.locked": "会话已锁定",
+    "status.checking": "检查中…",
+    "status.loggedOut": "未登录",
+
+    // Actions
+    "action.lock": "锁定",
+    "action.createLockCode": "创建锁定码",
+    "action.unlock": "解锁",
+    "action.login": "登录",
+    "action.refresh": "刷新",
+
+    // Navigation
+    "nav.vaults": "保管库",
+    "vault.all": "所有保管库",
+    "vault.allShort": "全部",
+    "search.vaults": "搜索保管库…",
+    "search.filterIn": "在 %1 中筛选…",
+    "vault.noneAccessible": "没有可用的保管库。",
+    "vault.hintLockedOrOut": "请登录或解锁后继续。",
+    "vault.loading": "正在加载保管库…",
+    "items.noneAtAll": "保管库中没有任何项目。",
+    "items.noneHere": "此处没有项目。",
+    "detail.decrypting": "正在解密项目…",
+    "detail.noFields": "没有可显示的字段。",
+    "field.empty": "（空）",
+    "field.copyValue": "复制值",
+
+    // Copy actions
+    "copy.username": "复制用户名",
+    "copy.password": "复制密码",
+    "copy.totp": "复制 TOTP 验证码",
+
+    // Item types
+    "type.login": "登录",
+    "type.alias": "别名",
+    "type.note": "安全笔记",
+    "type.credit_card": "银行卡",
+    "type.identity": "身份信息",
+    "type.ssh_key": "SSH 密钥",
+    "type.wifi": "Wi-Fi",
+    "type.other": "其他",
+
+    // Errors & misc
+    "error.detailRead": "无法读取项目 — 会话已锁定或项目不可访问。",
+    "error.detailParse": "pass-cli 返回内容无法解析。",
+    "error.actionFailed": "操作失败",
+    "totp.currentHint": "（复制时获取当前验证码）",
+    "field.extraFallback": "字段",
+
+    // Field labels shown in the item detail view
+    "field.email": "邮箱",
+    "field.username": "用户名",
+    "field.password": "密码",
+    "field.urls": "URL 列表",
+    "field.url": "URL",
+    "field.totp": "TOTP",
+    "field.content": "内容",
+    "field.note": "笔记",
+    "field.cardholder": "持卡人",
+    "field.number": "卡号",
+    "field.cvv": "CVV",
+    "field.expiration": "有效期",
+    "field.ssid": "SSID",
+    "field.pin": "PIN 码",
+    "field.publickey": "公钥",
+    "field.privatekey": "私钥",
+    "field.fingerprint": "指纹",
+
+    // Notifications (shared wording with the shell scripts)
+    "notify.copied": "已复制",
+    "notify.copyFailed": "复制失败",
+    "notify.readFailed": "读取失败",
+    "notify.locking": "锁定中",
+    "notify.copyOf": "正在复制 %1",
+    "notify.actionFailed": "%1 失败（代码 %2）",
+    "notify.missingPassCli": "未找到 pass-cli",
+    "notify.installHint": "请安装 proton-pass-cli。",
+    "notify.missingWlCopy": "缺少 wl-copy",
+    "notify.wlClipboardNeeded": "需要 wl-clipboard 才能复制。",
+    "notify.totpLabel": "TOTP 验证码",
+    "notify.passwordLabel": "密码",
+    "notify.usernameLabel": "用户名",
+    "notify.forItem": "%2 的 %1",
+    "notify.ofItem": "已复制 %2 的 %1（%3 秒）",
+    "unit.seconds": "秒"
+  },
+
   fr: {
     "status.unlocked": "Session déverrouillée",
     "status.locked": "Session verrouillée",

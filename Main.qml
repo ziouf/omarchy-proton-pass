@@ -403,6 +403,12 @@ Item {
     }
 
     root.detailFields = rows
+
+    // Remember whether this item really carries a TOTP so list rows can stop
+    // offering the action when it does not.
+    var hasTotp = !!(typeObj && typeof typeObj.totp_uri === "string" && typeObj.totp_uri !== "")
+    if (root.currentItem)
+      setItemHasTotp(String(root.currentItem.itemId || root.currentItem.title || ""), hasTotp)
   }
 
   // ---------------------------------------------------- buffered copying
@@ -440,6 +446,8 @@ Item {
   // -------------------------------------------------------------- actions
 
   property string actionProcessLabel: ""
+  property string actionField: ""
+  property string actionItemId: ""
 
   Process {
     id: actionProcess
@@ -452,13 +460,43 @@ Item {
 
     onExited: function(exitCode) {
       var label = root.actionProcessLabel
+      var field = root.actionField
+      var itemId = root.actionItemId
       root.actionProcessLabel = ""
-      if (exitCode !== 0) {
+      root.actionField = ""
+      root.actionItemId = ""
+
+      if (exitCode === 3 && field === "totp") {
+        // pass-cli confirmed the item carries no TOTP: remember it so the
+        // row stops offering the action.
+        setItemHasTotp(itemId, false)
+      } else if (exitCode === 0 && field === "totp") {
+        setItemHasTotp(itemId, true)
+      } else if (exitCode !== 0) {
         root.notify(tr("error.actionFailed"),
                     trFmt("notify.actionFailed", label, exitCode), "critical")
       }
       root.probeSession()
     }
+  }
+
+  function setItemHasTotp(itemId, value) {
+    if (itemId === "") return
+    var changed = false
+    var next = []
+    for (var i = 0; i < root.items.length; i++) {
+      var entry = root.items[i]
+      if (entry.itemId === itemId || (entry.itemId === "" && entry.title === itemId)) {
+        var copy = Object.assign({}, entry, { hasTotp: value })
+        next.push(copy)
+        changed = true
+      } else {
+        next.push(entry)
+      }
+    }
+    if (!changed) return
+    root.items = next
+    root.dataRevision++
   }
 
   function runAction(command, label) {
@@ -477,6 +515,8 @@ Item {
     // pass://<vault>/<item>/<field> accepts both ids and titles.
     var vault = String(item.shareId || item.vault || "")
     var ref = String(item.itemId || item.title || "")
+    root.actionField = field
+    root.actionItemId = ref
     runAction([root.scriptDir + "/copy-secret", vault, ref, field,
                String(Math.max(0, root.clipboardTimeoutSec))],
               trFmt("notify.copyOf", field))

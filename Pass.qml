@@ -623,7 +623,9 @@ Panel {
         foreground: root.dim
         hoverColor: root.foreground
         tooltipText: root.tr("copy.totp")
-        visible: !!row.item && row.item.itemType === "login" && pass.showTotp
+        // Hidden once pass-cli confirmed the item carries no TOTP.
+        visible: !!row.item && row.item.itemType === "login"
+                 && pass.showTotp && row.item.hasTotp !== false
         onClicked: row.copiedField("totp")
       }
     }

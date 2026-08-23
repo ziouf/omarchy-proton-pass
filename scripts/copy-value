@@ -2,11 +2,12 @@
 # copy-value — put an already-decrypted value on the clipboard.
 # usage: copy-value <buffer-file> <label> [kind] [clear-after-seconds]
 #
-# The value is read from a 0600 file in XDG_RUNTIME_DIR (tmpfs), never passed
-# as a process argument. The buffer file is removed immediately after the
-# copy, and the clipboard is cleared after the optional delay if our value is
-# still what sits there. Notification wording follows LC_ALL / LC_MESSAGES /
-# LANG (fr, else en).
+# Byte-exact: the file is piped straight into wl-copy, so multiline values and
+# special characters survive untouched. The buffer lives in XDG_RUNTIME_DIR
+# (tmpfs, 0600), is shredded right after the copy, and the clipboard is
+# cleared after the optional delay if our value is still what sits there
+# (SHA-256 comparison). Notification wording follows LC_ALL / LC_MESSAGES /
+# LANG (fr, zh, else en).
 
 set -euo pipefail
 
@@ -18,13 +19,18 @@ clear_after="${4:-30}"
 # --- i18n -----------------------------------------------------------------
 raw_lang="${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
 lang="$(echo "${raw_lang%%.*}" | cut -d_ -f1 | tr '[:upper:]' '[:lower:]')"
-[[ "$lang" == "fr" ]] || lang="en"
+case "$lang" in fr|zh) ;; *) lang="en" ;; esac
 
 if [[ "$lang" == "fr" ]]; then
   msg_copied="Copié"
   kind_secret="secret"
   kind_value="valeur"
   msg_of_item='%1 « %2 » (%3 s)'
+elif [[ "$lang" == "zh" ]]; then
+  msg_copied="已复制"
+  kind_secret="机密"
+  kind_value="值"
+  msg_of_item='%2 的 %1（%3 秒）'
 else
   msg_copied="Copied"
   kind_secret="secret"
@@ -50,19 +56,19 @@ fmt() { # fmt <template> <arg1> [arg2] [arg3]
 command -v wl-copy >/dev/null 2>&1 || exit 1
 [[ -f $file ]] || exit 1
 
-secret="$(cat "$file")"
+# Byte-exact copy: pipe the file, never an expanded variable.
+expected_sum="$(sha256sum < "$file" | cut -d' ' -f1)"
+wl-copy < "$file" >/dev/null 2>&1
 shred -u "$file" 2>/dev/null || rm -f "$file"
-
-printf '%s' "$secret" | wl-copy
 
 if [[ "$clear_after" =~ ^[0-9]+$ ]] && (( clear_after > 0 )); then
   (
     sleep "$clear_after"
-    current="$(wl-paste 2>/dev/null || true)"
-    [[ "$current" == "$secret" ]] && wl-copy --clear || true
+    current_sum="$(wl-paste 2>/dev/null | sha256sum | cut -d' ' -f1 || true)"
+    [[ "$current_sum" == "$expected_sum" ]] && wl-copy --clear || true
   ) &
   disown
 fi
 
 notify-send -a "Proton Pass" -t 2000 "$msg_copied" \
-  "$(fmt "$msg_of_item" "$display_kind" "${label}" "${clear_after}")" 2>/dev/null || true
+  "$(fmt "$msg_of_item" "$display_kind" "$label" "$clear_after")" 2>/dev/null || true

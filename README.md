@@ -30,6 +30,13 @@ desktop lock.
 - **Launcher menu entries** — optional snippet to drive the plugin from the
   Omarchy menu (search / lock / unlock / login).
 
+## Languages
+
+The interface and notifications follow the system locale
+(`LC_ALL` > `LC_MESSAGES` > `LANG`): **English**, **Français** and
+**简体中文** are bundled. Any other locale falls back to English. Adding a
+language is a single block in `I18n.js`.
+
 ## Requirements
 
 - [Omarchy](https://omarchy.org)
@@ -152,6 +159,9 @@ Leftovers you may want to clean manually:
 - The session guard locks the CLI session server-side via
   `pass-cli session lock`; it requires a lock code created beforehand with
   `pass-cli session create-lock`.
+- Copies are byte-exact (multiline values and special characters survive);
+  the TOTP quick action disappears once pass-cli confirms an item carries
+  no TOTP code.
 
 ## License
 
