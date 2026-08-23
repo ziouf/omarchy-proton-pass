@@ -102,6 +102,7 @@ else
   payload="$(jq -n --arg prompt "$prompt_items" --argjson options "$labels_json" \
                     --arg sel "$sel_file" --arg done "$done_file" \
               '{mode: "select", prompt: $prompt, filterable: true,
+                width: 600, maxHeight: 600,
                 options: $options, selectionFile: $sel, doneFile: $done}')"
   omarchy-shell shell summon omarchy.menu "$payload"
 
@@ -131,6 +132,7 @@ if [[ -z "$action" ]]; then
   payload="$(jq -n --arg prompt "$prompt_field" --argjson options "$fields_json" \
                     --arg sel "$sel_file" --arg done "$done_file" \
               '{mode: "select", prompt: $prompt, filterable: true,
+                width: 380,
                 options: $options, selectionFile: $sel, doneFile: $done}')"
   omarchy-shell shell summon omarchy.menu "$payload"
 
