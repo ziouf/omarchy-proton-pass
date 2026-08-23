@@ -109,24 +109,37 @@ Item {
     var err = String(root.probeStderr || "")
     var combined = (out + "\n" + err).toLowerCase()
 
+    // pass-cli info exits 0 even when it fails ("Command is not logout there
+    // is no session"), so the text decides first — most importantly after a
+    // long suspend, where the server-side lock expiry destroys the session
+    // and unlock can never succeed: only a fresh login can.
+    var noSession = combined.indexOf("no session") >= 0
+        || combined.indexOf("authenticated client") >= 0
+        || combined.indexOf("not logged") >= 0
+        || combined.indexOf("session expired") >= 0
+        || combined.indexOf("login required") >= 0
+
+    if (noSession) {
+      root.status = "logged-out"
+      root.account = ""
+      root.hasLockCode = false
+      if (root.items.length > 0 || root.vaults.length > 0) {
+        root.items = []
+        root.vaults = []
+        root.dataRevision++
+      }
+      return
+    }
+
     if (exitCode !== 0) {
       console.log("ziouf.proton-pass/probe exit=" + exitCode +
                   " out=" + JSON.stringify(out.slice(0, 200)) +
                   " err=" + JSON.stringify(err.slice(0, 200)))
       if (combined.indexOf("lock") >= 0 && combined.indexOf("unlock") < 0) {
         root.status = "locked"
-      } else if (combined.indexOf("not logged") >= 0 || combined.indexOf("no session") >= 0
-                 || combined.indexOf("log in") >= 0 || combined.indexOf("login required") >= 0
-                 || combined.indexOf("session expired") >= 0) {
-        console.log("ziouf.proton-pass/probe -> logged-out (clearing state)")
+      } else if (combined.indexOf("log in") >= 0) {
         root.status = "logged-out"
         root.account = ""
-        root.hasLockCode = false
-        if (root.items.length > 0 || root.vaults.length > 0) {
-          root.items = []
-          root.vaults = []
-          root.dataRevision++
-        }
       } else {
         // An unknown failure (offline, update pending…) keeps the last known
         // state rather than flapping the bar icon on every transient error.

@@ -363,6 +363,9 @@ Panel {
               spacing: Style.space(6)
 
               Button {
+                // Without a session there is nothing to unlock — the Sign in
+                // button next to it owns that state.
+                visible: pass.status !== "logged-out"
                 text: pass.status === "unlocked"
                       ? (pass.hasLockCode ? tr("action.lock") : tr("action.createLockCode"))
                       : tr("action.unlock")
@@ -374,7 +377,7 @@ Panel {
                 onClicked: {
                   if (pass.status === "unlocked") {
                     if (pass.hasLockCode) pass.lockSession()
-                    else pass.launchTerminal("pass-cli session create-lock")
+                    else pass.launchTerminal("pass-cli session create-lock --idle-timeout 900")
                   } else {
                     pass.unlock()
                   }

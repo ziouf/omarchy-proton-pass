@@ -193,6 +193,11 @@ omarchy-shell ziouf.proton-pass openItem <itemId>   # open the panel on an item'
 - **SSH uses the wrong keys** — with `install-services.sh`, `SSH_AUTH_SOCK`
   points at the Proton Pass agent; import your local keys into a vault or
   remove `~/.config/environment.d/90-proton-pass.conf`.
+- **Unlock fails after suspend** ("there is no session") — a locked session
+  is destroyed server-side once the lock idle timeout elapses (15 min max,
+  see `pass-cli session create-lock --idle-timeout 900`). This is by design:
+  after a long suspend the panel offers **Sign in** again instead of
+  unlock. Short suspends under the timeout keep the session recoverable.
 
 ## Settings
 
