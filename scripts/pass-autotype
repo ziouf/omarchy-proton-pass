@@ -1,0 +1,52 @@
+#!/bin/bash
+# pass-autotype — type an item's username, then Tab, then its password into
+# the currently focused window (KeePassXC-style), using wtype.
+#
+# usage: pass-autotype <vault-or-share-id> <item-id-or-title>
+#
+# Safety: a 3-second heads-up notification lets you cancel by switching focus
+# or closing; no Enter is ever typed. Secrets are fetched into 0600 tmpfs
+# buffers and shredded immediately.
+
+set -euo pipefail
+
+share="${1:?usage: pass-autotype <vault> <item>}"
+item="${2:?usage: pass-autotype <vault> <item>}"
+
+runtime_dir="${XDG_RUNTIME_DIR:-/tmp}"
+fetch() { # fetch <field> <buffer>
+  local secret
+  secret="$(pass-cli item view "pass://$share/$item/$1")" || return 1
+  printf '%s' "$secret" > "$2"
+}
+
+command -v wtype >/dev/null 2>&1 || {
+  notify-send -a "Proton Pass" -u critical "wtype manquant" 2>/dev/null || true
+  exit 1
+}
+
+user_buf="$(mktemp "$runtime_dir/ziouf.proton-pass.XXXXXX")"
+pass_buf="$(mktemp "$runtime_dir/ziouf.proton-pass.XXXXXX")"
+trap 'shred -u "$user_buf" "$pass_buf" 2>/dev/null || rm -f "$user_buf" "$pass_buf"' EXIT
+chmod 600 "$user_buf" "$pass_buf"
+
+if ! fetch username "$user_buf"; then printf '' > "$user_buf"; fi
+fetch password "$pass_buf" || {
+  notify-send -a "Proton Pass" -u critical "Échec de lecture" "mot de passe pour « $item »" 2>/dev/null || true
+  exit 1
+}
+
+username="$(cat "$user_buf")"
+
+notify-send -a "Proton Pass" -t 3000 "Autotype dans 3 s" "Fenêtre ciblée : fenêtre active" 2>/dev/null || true
+sleep 3
+
+if [[ -n "$username" ]]; then
+  wtype -- "$username"
+  sleep 0.15
+  wtype -k Tab
+  sleep 0.15
+fi
+wtype -- "$(cat "$pass_buf")"
+
+notify-send -a "Proton Pass" -t 2000 "Autotype terminé" "« $item »" 2>/dev/null || true

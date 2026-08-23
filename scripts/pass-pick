@@ -1,0 +1,152 @@
+#!/bin/bash
+# pass-pick — global Proton Pass picker: fuzzy-search every vault item from
+# anywhere, choose the field, copy it (or launch autotype / open the panel
+# detail). Backed by the local metadata cache (see pass-cache-update), so it
+# opens instantly.
+#
+# Usage: pass-pick
+# Dev/test affordances:
+#   PASS_PICK_LABEL="<label>"   skip the item picker, act on this label
+#   PASS_PICK_FIELD="<action>"  skip the field picker (copy-username,
+#                               copy-password, copy-totp, autotype, detail)
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ziouf.proton-pass"
+CACHE="$CACHE_DIR/items.json"
+STALE_SEC=900
+
+# --- i18n -----------------------------------------------------------------
+raw_lang="${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
+lang="$(echo "${raw_lang%%.*}" | cut -d_ -f1 | tr '[:upper:]' '[:lower:]')"
+case "$lang" in fr|zh) ;; *) lang="en" ;; esac
+
+if [[ "$lang" == "fr" ]]; then
+  prompt_items="Proton Pass — rechercher"
+  prompt_field="Copier quoi ?"
+  a_username="Copier l'identifiant"
+  a_password="Copier le mot de passe"
+  a_totp="Copier le code TOTP"
+  a_autotype="Autotype (identifiant ⇥ mot de passe)"
+  a_detail="Ouvrir le détail dans le panneau"
+  msg_cache_fail="Cache Proton Pass indisponible"
+  msg_cache_fail_body="Lancement du rafraîchissement… réessaie dans un instant."
+  msg_stale="Cache Proton Pass périmé"
+  msg_stale_body="Rafraîchissement en arrière-plan."
+elif [[ "$lang" == "zh" ]]; then
+  prompt_items="Proton Pass — 搜索"
+  prompt_field="复制什么？"
+  a_username="复制用户名"
+  a_password="复制密码"
+  a_totp="复制 TOTP 验证码"
+  a_autotype="自动输入（用户名 ⇥ 密码）"
+  a_detail="在面板中打开详情"
+  msg_cache_fail="Proton Pass 缓存不可用"
+  msg_cache_fail_body="正在刷新…请稍后重试。"
+  msg_stale="Proton Pass 缓存已过期"
+  msg_stale_body="正在后台刷新。"
+else
+  prompt_items="Proton Pass — search"
+  prompt_field="Copy what?"
+  a_username="Copy username"
+  a_password="Copy password"
+  a_totp="Copy TOTP code"
+  a_autotype="Autotype (username ⇥ password)"
+  a_detail="Open details in the panel"
+  msg_cache_fail="Proton Pass cache unavailable"
+  msg_cache_fail_body="Refreshing now… try again in a moment."
+  msg_stale="Proton Pass cache is stale"
+  msg_stale_body="Refreshing in the background."
+fi
+
+# --- cache ----------------------------------------------------------------
+if [[ ! -f "$CACHE" ]]; then
+  notify-send -a "Proton Pass" "$msg_cache_fail" "$msg_cache_fail_body" 2>/dev/null || true
+  "$SCRIPT_DIR/pass-cache-update" >/dev/null 2>&1 || exit 1
+fi
+
+now_s="$(date +%s)"
+updated_s="$(jq -r '.updatedAtMs // 0' "$CACHE" 2>/dev/null | cut -c1-10)"
+if [[ -n "$updated_s" && $((now_s - updated_s)) -gt $STALE_SEC ]]; then
+  notify-send -a "Proton Pass" -t 2000 "$msg_stale" "$msg_stale_body" 2>/dev/null || true
+  setsid "$SCRIPT_DIR/pass-cache-update" >/dev/null 2>&1 <&- &
+fi
+
+# --- item picker ----------------------------------------------------------
+# labels.tsv: "<display label>\t<shareId>|<itemId>" (duplicates get " · N").
+labels_tsv="$(mktemp)"
+trap 'rm -f "$labels_tsv" "$sel_file" "$done_file"' EXIT
+
+jq -r '.items[] | [.title, .vault, .shareId, .itemId] | @tsv' "$CACHE" \
+| awk -F'\t' '
+  {
+    label = $1 " — " $2
+    seen[label]++
+    if (seen[label] > 1) label = label " · " seen[label]
+    print label "\t" $3 "|" $4
+  }' > "$labels_tsv"
+
+if [[ ! -s "$labels_tsv" ]]; then
+  notify-send -a "Proton Pass" "Aucun élément en cache" 2>/dev/null || true
+  exit 0
+fi
+
+choice=""
+if [[ -n "${PASS_PICK_LABEL:-}" ]]; then
+  choice="$PASS_PICK_LABEL"
+else
+  sel_file="$(mktemp)"
+  done_file="$(mktemp)"
+  labels_json="$(cut -f1 "$labels_tsv" | jq -R . | jq -s .)"
+  payload="$(jq -n --arg prompt "$prompt_items" --argjson options "$labels_json" \
+                    --arg sel "$sel_file" --arg done "$done_file" \
+              '{mode: "select", prompt: $prompt, filterable: true,
+                options: $options, selectionFile: $sel, doneFile: $done}')"
+  omarchy-shell shell summon omarchy.menu "$payload"
+
+  for _ in $(seq 1 600); do
+    [[ -s "$done_file" || -s "$sel_file" ]] && break
+    sleep 0.5
+  done
+  choice="$(cat "$sel_file" 2>/dev/null || true)"
+  [[ -z "$choice" ]] && exit 0    # cancelled
+fi
+
+ref="$(awk -F'\t' -v c="$choice" '$1 == c { print $2; exit }' "$labels_tsv")"
+if [[ -z "$ref" ]]; then
+  # Fallback for a stale cache hit: refresh in the background and give up.
+  setsid "$SCRIPT_DIR/pass-cache-update" >/dev/null 2>&1 <&- &
+  exit 0
+fi
+share_id="${ref%%|*}"
+item_id="${ref#*|}"
+
+# --- field picker ---------------------------------------------------------
+action="${PASS_PICK_FIELD:-}"
+if [[ -z "$action" ]]; then
+  sel_file="$(mktemp)"
+  done_file="$(mktemp)"
+  fields_json="$(printf '%s\n' "$a_username" "$a_password" "$a_totp" "$a_autotype" "$a_detail" | jq -R . | jq -s .)"
+  payload="$(jq -n --arg prompt "$prompt_field" --argjson options "$fields_json" \
+                    --arg sel "$sel_file" --arg done "$done_file" \
+              '{mode: "select", prompt: $prompt, filterable: true,
+                options: $options, selectionFile: $sel, doneFile: $done}')"
+  omarchy-shell shell summon omarchy.menu "$payload"
+
+  for _ in $(seq 1 600); do
+    [[ -s "$done_file" || -s "$sel_file" ]] && break
+    sleep 0.5
+  done
+  action="$(cat "$sel_file" 2>/dev/null || true)"
+  [[ -z "$action" ]] && exit 0    # cancelled
+fi
+
+case "$action" in
+  "$a_username")  exec "$SCRIPT_DIR/copy-secret" "$share_id" "$item_id" "username" 30 ;;
+  "$a_password")  exec "$SCRIPT_DIR/copy-secret" "$share_id" "$item_id" "password" 30 ;;
+  "$a_totp")      exec "$SCRIPT_DIR/copy-secret" "$share_id" "$item_id" "totp" 30 ;;
+  "$a_autotype")  exec "$SCRIPT_DIR/pass-autotype" "$share_id" "$item_id" ;;
+  "$a_detail")    exec omarchy-shell ziouf.proton-pass openItem "$item_id" ;;
+  *) exit 0 ;;
+esac

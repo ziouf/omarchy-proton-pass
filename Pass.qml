@@ -138,6 +138,23 @@ Panel {
     view = "detail"
   }
 
+  // Deep-link entry (pass-pick "detail" action, IPC): open the panel straight
+  // onto an item's detail view. Falls back to a plain open + refresh when the
+  // id is not in the loaded data yet.
+  function openItemById(id) {
+    var wanted = String(id || "")
+    root.open()
+    if (wanted === "") return
+    for (var i = 0; i < pass.items.length; i++) {
+      if (pass.items[i].itemId === wanted) {
+        currentVault = ""
+        openDetail(pass.items[i])
+        return
+      }
+    }
+    refreshNow()
+  }
+
   function goBack() {
     if (view === "detail") view = "items"
     else if (view === "items") { view = "vaults"; currentVault = ""; query = "" }
@@ -223,6 +240,7 @@ Panel {
     function lock(): string { pass.lockSession(); return "ok" }
     function login(): string { pass.login(); return "ok" }
     function unlock(): string { pass.unlock(); return "ok" }
+    function openItem(id: string): string { root.openItemById(id); return "ok" }
   }
 
   // ----------------------------------------------------------------- icon

@@ -25,17 +25,21 @@ install_unit() {
 
 install_unit proton-pass-ssh-agent.service
 install_unit proton-pass-session-guard.service
+install_unit proton-pass-cache.service
+install_unit proton-pass-cache.timer
 
 mkdir -p "$ENV_DIR"
 printf 'SSH_AUTH_SOCK=%%h/.ssh/proton-pass-agent.sock\n' > "$ENV_DIR/90-proton-pass.conf"
 
 systemctl --user daemon-reload
 systemctl --user enable --now proton-pass-ssh-agent.service proton-pass-session-guard.service
+systemctl --user enable --now proton-pass-cache.timer
 systemctl --user set-environment SSH_AUTH_SOCK="$HOME/.ssh/proton-pass-agent.sock"
 
 echo "Installed and started:"
 echo "  - proton-pass-ssh-agent.service    (SSH agent on ~/.ssh/proton-pass-agent.sock)"
 echo "  - proton-pass-session-guard.service (locks pass-cli when the desktop locks)"
+echo "  - proton-pass-cache.timer           (metadata cache for instant autocomplete)"
 echo "  - $ENV_DIR/90-proton-pass.conf      (SSH_AUTH_SOCK for new sessions)"
 echo
 echo "Note: with SSH_AUTH_SOCK set, ssh uses keys stored in Proton Pass."

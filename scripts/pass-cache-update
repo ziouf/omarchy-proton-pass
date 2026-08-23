@@ -1,0 +1,43 @@
+#!/bin/bash
+# pass-cache-update — refresh the local metadata cache used by the picker and
+# the panel for instant autocomplete.
+#
+# Writes ~/.cache/ziouf.proton-pass/items.json (0600): vault names plus one
+# entry per active item (ids, title, vault, type). NEVER stores passwords,
+# TOTP seeds or notes — metadata only. Atomic write, keeps the previous cache
+# on any failure.
+
+set -euo pipefail
+
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ziouf.proton-pass"
+mkdir -p "$CACHE_DIR"
+chmod 700 "$CACHE_DIR"
+
+command -v pass-cli >/dev/null 2>&1 || exit 1
+command -v jq >/dev/null 2>&1 || exit 1
+
+vaults_json="$(pass-cli vault list --output json 2>/dev/null)" || exit 1
+
+tmp="$(mktemp "$CACHE_DIR/items.json.tmp.XXXXXX")"
+chmod 600 "$tmp"
+trap 'rm -f "$tmp"' EXIT
+
+# One NDJSON line per active item, then fold into a JSON array.
+while IFS= read -r name; do
+  [[ -z "$name" ]] && continue
+  pass-cli item list "$name" --output json 2>/dev/null | jq -c --arg v "$name" '
+    .items[]?
+    | select(.state == "Active")
+    | {itemId: .id, shareId: .share_id, vault: $v, title: .title, itemType: .item_type}' \
+    || true
+done < <(jq -r '.vaults[].name' <<<"$vaults_json") | jq -s '.' > "$tmp.items"
+
+jq -n \
+  --arg now "$(date -Iseconds)" \
+  --argjson vaults "$(jq -c '[.vaults[].name]' <<<"$vaults_json")" \
+  --argjson items "$(cat "$tmp.items")" \
+  '{schemaVersion: 1, updatedAt: $now, vaults: $vaults, items: $items}' > "$tmp"
+rm -f "$tmp.items"
+
+mv "$tmp" "$CACHE_DIR/items.json"
+chmod 600 "$CACHE_DIR/items.json"

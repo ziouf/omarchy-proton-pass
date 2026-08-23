@@ -58,7 +58,7 @@ command -v wl-copy >/dev/null 2>&1 || exit 1
 
 # Byte-exact copy: pipe the file, never an expanded variable.
 expected_sum="$(sha256sum < "$file" | cut -d' ' -f1)"
-wl-copy < "$file" >/dev/null 2>&1
+wl-copy --sensitive < "$file" >/dev/null 2>&1
 shred -u "$file" 2>/dev/null || rm -f "$file"
 
 if [[ "$clear_after" =~ ^[0-9]+$ ]] && (( clear_after > 0 )); then

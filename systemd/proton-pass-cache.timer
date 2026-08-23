@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh the Proton Pass metadata cache periodically
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Persistent=false
+
+[Install]
+WantedBy=timers.target

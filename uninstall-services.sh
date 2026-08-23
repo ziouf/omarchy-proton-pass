@@ -12,6 +12,10 @@ for unit in proton-pass-ssh-agent.service proton-pass-session-guard.service; do
   rm -f "$SYSTEMD_DIR/$unit"
 done
 
+systemctl --user disable --now proton-pass-cache.timer 2>/dev/null || true
+rm -f "$SYSTEMD_DIR/proton-pass-cache.service" "$SYSTEMD_DIR/proton-pass-cache.timer"
+rm -rf "${XDG_CACHE_HOME:-$HOME/.cache}/ziouf.proton-pass"
+
 rm -f "$ENV_FILE"
 systemctl --user daemon-reload
 

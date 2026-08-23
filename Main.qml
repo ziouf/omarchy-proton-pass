@@ -273,17 +273,28 @@ Item {
         title: title,
         itemType: String(raw.item_type || raw.type || ""),
         username: "",
-        hasTotp: false
+        hasTotp: undefined
       })
     }
   }
 
   function publishItems() {
+    // Learned TOTP presence survives walks: match previous entries by id.
+    var learned = {}
+    for (var p = 0; p < root.items.length; p++) {
+      var prev = root.items[p]
+      if (prev.hasTotp !== undefined) learned[prev.itemId] = prev.hasTotp
+    }
     var result = root.itemAccumulator.slice()
+    for (var i = 0; i < result.length; i++) {
+      if (learned[result[i].itemId] !== undefined)
+        result[i].hasTotp = learned[result[i].itemId]
+    }
     result.sort(function(a, b) { return a.title.localeCompare(b.title) })
     root.items = result
     root.dataRevision++
     root.itemsLoading = false
+    writeCache()
   }
 
   // --------------------------------------------------------- item detail
@@ -425,6 +436,63 @@ Item {
     watchChanges: false
     atomicWrites: true
     printErrors: false
+  }
+
+  // ------------------------------------------------------- metadata cache
+  //
+  // The picker and the panel both want items without waiting for a full
+  // vault walk. pass-cache-update (systemd timer) and publishItems() keep
+  // this file current; at startup we hydrate from it instantly, then the
+  // regular walk replaces the data with live values.
+  readonly property string cachePath: (Quickshell.env("XDG_CACHE_HOME") || home + "/.cache")
+                                      + "/ziouf.proton-pass/items.json"
+
+  FileView {
+    id: cacheFile
+    path: root.cachePath
+    watchChanges: false
+    atomicWrites: true
+    printErrors: false
+    onLoaded: root.parseCache(text())
+  }
+
+  function parseCache(output) {
+    var parsed = null
+    try {
+      parsed = JSON.parse(String(output || ""))
+    } catch (e) {
+      return
+    }
+    if (!parsed || !Array.isArray(parsed.items)) return
+
+    var result = []
+    for (var i = 0; i < parsed.items.length; i++) {
+      var raw = parsed.items[i] || {}
+      var title = String(raw.title || "").trim()
+      if (title === "") continue
+      result.push({
+        itemId: String(raw.itemId || ""),
+        shareId: String(raw.shareId || ""),
+        vault: String(raw.vault || ""),
+        title: title,
+        itemType: String(raw.itemType || ""),
+        username: "",
+        hasTotp: undefined
+      })
+    }
+    root.vaults = Array.isArray(parsed.vaults) ? parsed.vaults : []
+    root.items = result
+    root.dataRevision++
+  }
+
+  function writeCache() {
+    var payload = {
+      schemaVersion: 1,
+      updatedAt: new Date().toISOString(),
+      vaults: root.vaults,
+      items: root.items
+    }
+    cacheFile.setText(JSON.stringify(payload))
   }
 
   Process {

@@ -27,6 +27,12 @@ desktop lock.
   - `proton-pass-ssh-agent.service`: run pass-cli as your SSH agent
   - `proton-pass-session-guard.service`: lock the pass-cli session whenever
     the Omarchy desktop locks
+- **Global picker (`pass-pick`)** — a fuzzy-search menu summonable from
+  anywhere (keybinding, Omarchy menu, CLI): pick an item, then the field to
+  copy, autotype it into the focused window, or jump to the panel detail.
+- **Metadata cache** — a systemd timer refreshes `~/.cache/ziouf.proton-pass/
+  items.json` (ids, titles, vaults — never secrets, mode 0600) so the picker
+  and the panel open instantly.
 - **Launcher menu entries** — optional snippet to drive the plugin from the
   Omarchy menu (search / lock / unlock / login).
 
@@ -80,6 +86,21 @@ then resolve SSH keys stored in your Proton Pass vaults.
 
 > Import existing keys so ssh keeps working:
 > `pass-cli item create ssh-key import --from-private-key ~/.ssh/id_ed25519 --title "$(hostname)"`
+
+### Global keybinding
+
+Add to `~/.config/hypr/bindings.lua`:
+
+```lua
+o.bind("SUPER + ALT + P", "Proton Pass",
+       "$HOME/.config/omarchy/plugins/ziouf.proton-pass/scripts/pass-pick")
+```
+
+`SUPER + ALT + P` then opens the searchable picker from anywhere: type to
+filter, pick an item, choose what to do (copy username / password / TOTP,
+autotype, open details). Secrets are copied with the
+`x-kde-passwordManagerHint` flag so the Omarchy clipboard manager excludes
+them from history.
 
 ### Optional Omarchy menu shortcuts
 
@@ -159,6 +180,8 @@ Leftovers you may want to clean manually:
 - The session guard locks the CLI session server-side via
   `pass-cli session lock`; it requires a lock code created beforehand with
   `pass-cli session create-lock`.
+- Autotype types into whatever window has focus after a 3-second heads-up;
+  it never presses Enter. Point it at a trusted window.
 - Copies are byte-exact (multiline values and special characters survive);
   the TOTP quick action disappears once pass-cli confirms an item carries
   no TOTP code.
