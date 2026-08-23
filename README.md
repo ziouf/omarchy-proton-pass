@@ -28,8 +28,10 @@ desktop lock.
   - `proton-pass-session-guard.service`: lock the pass-cli session whenever
     the Omarchy desktop locks
 - **Global picker (`pass-pick`)** — a fuzzy-search menu summonable from
-  anywhere (keybinding, Omarchy menu, CLI): pick an item, then the field to
-  copy, autotype it into the focused window, or jump to the panel detail.
+  anywhere (keybinding, Omarchy menu, CLI): every result is labelled with its
+  item type (Login, Alias, Secure note, Credit card, Identity, SSH key,
+  Wi-Fi); pick an item, then the field to copy, autotype it into the focused
+  window, or jump to the panel detail.
 - **Metadata cache** — a systemd timer refreshes `~/.cache/ziouf.proton-pass/
   items.json` (ids, titles, vaults — never secrets, mode 0600) so the picker
   and the panel open instantly.
@@ -115,7 +117,12 @@ Append to `~/.config/omarchy/extensions/omarchy-menu.jsonc`:
   },
   "trigger.pass.search": {
     "icon": "\udb80\udc49",
-    "label": "Rechercher un secret",
+    "label": "Rechercher un secret (copier)",
+    "action": "$HOME/.config/omarchy/plugins/ziouf.proton-pass/scripts/pass-pick"
+  },
+  "trigger.pass.panel": {
+    "icon": "\uf084",
+    "label": "Parcourir les coffres (panneau)",
     "action": "omarchy-shell ziouf.proton-pass toggle"
   },
   "trigger.pass.lock": {
@@ -162,6 +169,30 @@ Leftovers you may want to clean manually:
 - the widget entry in `~/.config/omarchy/shell.json`, if it was added to the
   bar layout manually
 - menu entries in `~/.config/omarchy/extensions/omarchy-menu.jsonc`
+
+## IPC reference
+
+Drive the plugin from scripts or keybindings:
+
+```bash
+omarchy-shell ziouf.proton-pass toggle              # open/close the panel
+omarchy-shell ziouf.proton-pass refresh             # re-probe + re-list
+omarchy-shell ziouf.proton-pass lock                # lock the pass-cli session
+omarchy-shell ziouf.proton-pass unlock              # unlock (floating terminal)
+omarchy-shell ziouf.proton-pass login               # web login (floating terminal)
+omarchy-shell ziouf.proton-pass openItem <itemId>   # open the panel on an item's detail
+```
+
+## Troubleshooting
+
+- **Picker shows no items** — refresh the cache:
+  `~/.config/omarchy/plugins/ziouf.proton-pass/scripts/pass-cache-update`
+- **Picker results are stale** — the cache refreshes every 15 minutes
+  (`proton-pass-cache.timer`) and refreshes in the background when older;
+  force it with the command above.
+- **SSH uses the wrong keys** — with `install-services.sh`, `SSH_AUTH_SOCK`
+  points at the Proton Pass agent; import your local keys into a vault or
+  remove `~/.config/environment.d/90-proton-pass.conf`.
 
 ## Settings
 
