@@ -133,6 +133,7 @@ Panel {
 
   function openDetail(item) {
     cursorActive = false
+    root.currentItem = item
     pass.loadDetail(item)
     view = "detail"
   }
@@ -199,7 +200,9 @@ Panel {
     selectedIndex = 0
     cursorActive = false
     refreshNow()
-    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+    // Typing goes straight to the filter; the key catcher stays as a
+    // fallback for when focus moves elsewhere.
+    Qt.callLater(function() { searchField.forceActiveFocus() })
   }
 
   Connections {
@@ -386,6 +389,11 @@ Panel {
             onTextChanged: root.query = text
             Keys.onDownPressed: root.moveCursor(1)
             Keys.onUpPressed: root.moveCursor(-1)
+            Keys.onReturnPressed: root.activateRow(-1)
+            Keys.onEnterPressed: root.activateRow(-1)
+            Keys.onEscapePressed: root.close()
+            // Backspace on an empty filter walks back up one level.
+            Keys.onBackPressed: if (text === "") root.goBack()
           }
 
           // -------------------------------------------------- vault list
