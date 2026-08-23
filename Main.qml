@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "I18n.js" as I18n
 
 // Data layer of the Proton Pass bar widget. Every pass-cli exchange lives
 // here so the display side only reads plain properties:
@@ -23,6 +24,21 @@ Item {
 
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string scriptDir: home + "/.config/omarchy/plugins/ziouf.proton-pass/scripts"
+
+  // System locale drives the UI language (LC_ALL > LC_MESSAGES > LANG >
+  // Qt locale); English doubles as the fallback catalog.
+  readonly property string lang: I18n.normalize(
+    Quickshell.env("LC_ALL") || Quickshell.env("LC_MESSAGES")
+    || Quickshell.env("LANG") || Qt.locale().name)
+
+  function tr(key) { return I18n.tr(lang, key) }
+
+  function trFmt(key) {
+    var out = tr(key)
+    for (var i = 1; i < arguments.length; i++)
+      out = out.split("%" + i).join(String(arguments[i]))
+    return out
+  }
 
   property string status: "checking"
   property string account: ""
@@ -290,7 +306,7 @@ Item {
     onExited: function(exitCode) {
       root.detailLoading = false
       if (exitCode !== 0) {
-        root.detailError = "Lecture impossible — session verrouillée ou élément inaccessible."
+        root.detailError = root.tr("error.detailRead")
         return
       }
       root.parseDetail(root.detailStdout)
@@ -312,16 +328,13 @@ Item {
   }
 
   function prettifyKey(key) {
-    var map = {
-      "email": "E-mail", "username": "Identifiant", "password": "Mot de passe",
-      "urls": "URLs", "url": "URL", "totp_uri": "TOTP", "content": "Contenu",
-      "cardholder": "Titulaire", "number": "Numéro", "cvv": "CVV",
-      "expirationdate": "Expiration", "ssid": "SSID", "pin": "PIN",
-      "publickey": "Clé publique", "privatekey": "Clé privée",
-      "fingerprint": "Empreinte"
-    }
+    // Known keys translate through the catalog; unknown ones fall back to a
+    // capitalized raw name.
     var k = String(key || "").toLowerCase()
-    if (map[k]) return map[k]
+    if (k === "expirationdate") k = "expiration"
+    if (k === "totp_uri") k = "totp"
+    var translated = tr("field." + k)
+    if (translated !== ("field." + k)) return translated
     return String(key || "").replace(/_/g, " ").replace(/^./, function(c) { return c.toUpperCase() })
   }
 
@@ -330,7 +343,7 @@ Item {
     try {
       parsed = JSON.parse(String(output || ""))
     } catch (e) {
-      root.detailError = "Réponse illisible de pass-cli."
+      root.detailError = root.tr("error.detailParse")
       return
     }
     var it = (parsed && parsed.item) || {}
@@ -348,7 +361,7 @@ Item {
     }
 
     if (String(content.note || "").trim() !== "") {
-      rows.push({ label: "Note", field: "", value: String(content.note), hidden: false, multiline: true })
+      rows.push({ label: tr("field.note"), field: "", value: String(content.note), hidden: false, multiline: true })
     }
 
     if (typeObj) {
@@ -365,7 +378,7 @@ Item {
         } else if (typeof v === "object") {
           continue
         } else if (f === "totp_uri") {
-          rows.push({ label: "TOTP", field: "totp", value: "(code actuel à la copie)",
+          rows.push({ label: tr("field.totp"), field: "totp", value: tr("totp.currentHint"),
                       hidden: false, multiline: false })
         } else {
           var text = String(v)
@@ -379,7 +392,7 @@ Item {
     var extras = Array.isArray(content.extra_fields) ? content.extra_fields : []
     for (var e = 0; e < extras.length; e++) {
       var extra = extras[e] || {}
-      var label = String(extra.label || extra.name || "Champ")
+      var label = String(extra.label || extra.name || tr("field.extraFallback"))
       var value = ""
       if (extra.content !== undefined && extra.content !== null) value = String(extra.content)
       else if (extra.value !== undefined && extra.value !== null) value = String(extra.value)
@@ -418,7 +431,7 @@ Item {
     bufferFile.setText(String(value))
     Qt.callLater(function() {
       bufferCopyProcess.command = [scriptDir + "/copy-value", bufferPath,
-                                   label, hidden ? "secret" : "valeur",
+                                   label, hidden ? "secret" : "value",
                                    String(timeoutSec)]
       bufferCopyProcess.running = true
     })
@@ -441,7 +454,8 @@ Item {
       var label = root.actionProcessLabel
       root.actionProcessLabel = ""
       if (exitCode !== 0) {
-        root.notify("Échec", label + " a échoué (code " + exitCode + ")", "critical")
+        root.notify(tr("error.actionFailed"),
+                    trFmt("notify.actionFailed", label, exitCode), "critical")
       }
       root.probeSession()
     }
@@ -455,7 +469,7 @@ Item {
   }
 
   function lockSession() {
-    runAction(["pass-cli", "session", "lock"], "Verrouillage")
+    runAction(["pass-cli", "session", "lock"], tr("notify.locking"))
   }
 
   function copyField(item, field) {
@@ -465,7 +479,7 @@ Item {
     var ref = String(item.itemId || item.title || "")
     runAction([root.scriptDir + "/copy-secret", vault, ref, field,
                String(Math.max(0, root.clipboardTimeoutSec))],
-              "Copie de " + field)
+              trFmt("notify.copyOf", field))
   }
 
   // Terminal flows (login, unlock) need interactive prompts, so they open in

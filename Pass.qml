@@ -3,7 +3,9 @@ import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+
 import qs.Ui
+import "I18n.js" as I18n
 
 // Proton Pass bar widget: one icon, three-level panel. Vaults → typed items
 // → field detail, each level reachable with a click and undone with the back
@@ -35,6 +37,21 @@ Panel {
   property string query: ""
   property int selectedIndex: -1
 
+  // System locale selects the UI language (LC_ALL > LC_MESSAGES > LANG >
+  // Qt locale); English doubles as the fallback catalog.
+  readonly property string lang: I18n.normalize(
+    Quickshell.env("LC_ALL") || Quickshell.env("LC_MESSAGES")
+    || Quickshell.env("LANG") || Qt.locale().name)
+
+  function tr(key) { return I18n.tr(lang, key) }
+
+  function trFmt(key) {
+    var out = tr(key)
+    for (var i = 1; i < arguments.length; i++)
+      out = out.split("%" + i).join(String(arguments[i]))
+    return out
+  }
+
   Main {
     id: pass
     settings: root.settings
@@ -43,7 +60,7 @@ Panel {
   // -------------------------------------------------------------- helpers
 
   readonly property var vaultRows: {
-    var rows = [{ name: "", label: "Tous les coffres", count: pass.items.length }]
+    var rows = [{ name: "", label: tr("vault.all"), count: pass.items.length }]
     for (var i = 0; i < pass.vaults.length; i++) {
       var name = String(pass.vaults[i])
       rows.push({ name: name, label: name, count: countForVault(name) })
@@ -127,10 +144,10 @@ Panel {
   }
 
   function breadcrumb() {
-    if (view === "vaults") return "Coffres"
-    if (view === "items") return (currentVault === "" ? "Tous les coffres" : currentVault)
+    if (view === "vaults") return tr("nav.vaults")
+    if (view === "items") return (currentVault === "" ? tr("vault.all") : currentVault)
     var title = currentItem ? currentItem.title : ""
-    return (currentVault === "" ? "Tous" : currentVault) + " › " + title
+    return (currentVault === "" ? tr("vault.allShort") : currentVault) + " › " + title
   }
 
   function copyFor(item, field) {
@@ -148,10 +165,10 @@ Panel {
   }
 
   function statusLabel() {
-    if (pass.status === "unlocked") return "Session déverrouillée"
-    if (pass.status === "locked") return "Session verrouillée"
-    if (pass.status === "checking") return "Vérification…"
-    return "Non connecté"
+    if (pass.status === "unlocked") return tr("status.unlocked")
+    if (pass.status === "locked") return tr("status.locked")
+    if (pass.status === "checking") return tr("status.checking")
+    return tr("status.loggedOut")
   }
 
   function typeIcon(itemType) {
@@ -168,14 +185,11 @@ Panel {
 
   function typeLabel(itemType) {
     var t = String(itemType || "").toLowerCase()
-    if (t === "login") return "Connexion"
-    if (t === "alias") return "Alias"
-    if (t === "note") return "Note"
-    if (t === "credit_card" || t === "creditcard") return "Carte bancaire"
-    if (t === "identity") return "Identité"
-    if (t === "ssh_key" || t === "sshkey") return "Clé SSH"
-    if (t === "wifi") return "Wi-Fi"
-    return String(itemType || "Autre")
+    var key = { login: "login", alias: "alias", note: "note",
+                credit_card: "credit_card", creditcard: "credit_card",
+                identity: "identity", ssh_key: "ssh_key", sshkey: "ssh_key",
+                wifi: "wifi" }[t]
+    return key !== undefined ? tr("type." + key) : String(itemType || tr("type.other"))
   }
 
   onOpenedChanged: if (opened) {
@@ -329,8 +343,8 @@ Panel {
 
               Button {
                 text: pass.status === "unlocked"
-                      ? (pass.hasLockCode ? "Verrouiller" : "Créer un code")
-                      : "Déverrouiller"
+                      ? (pass.hasLockCode ? tr("action.lock") : tr("action.createLockCode"))
+                      : tr("action.unlock")
                 enabled: pass.status !== "checking" && pass.status !== "locked"
                 foreground: root.foreground
                 fontFamily: root.fontFamily
@@ -347,7 +361,7 @@ Panel {
               }
 
               Button {
-                text: pass.status === "logged-out" ? "Connexion" : "Actualiser"
+                text: pass.status === "logged-out" ? tr("action.login") : tr("action.refresh")
                 enabled: !pass.itemsLoading
                 foreground: root.foreground
                 fontFamily: root.fontFamily
@@ -366,8 +380,8 @@ Panel {
             visible: root.view !== "detail"
             width: parent.width
             placeholderText: root.view === "items"
-                             ? "Filtrer dans " + (currentVault === "" ? "tous les coffres" : currentVault) + "…"
-                             : "Rechercher un coffre…"
+                             ? trFmt("search.filterIn", currentVault === "" ? tr("vault.all") : currentVault)
+                             : tr("search.vaults")
             foreground: root.foreground
             onTextChanged: root.query = text
             Keys.onDownPressed: root.moveCursor(1)
@@ -393,8 +407,8 @@ Panel {
             visible: root.view === "vaults" && pass.vaults.length === 0 && !pass.itemsLoading
             width: parent.width
             text: pass.status === "unlocked"
-                  ? "Aucun coffre accessible."
-                  : root.statusLabel() + " — connecte-toi ou déverrouille pour continuer."
+                  ? tr("vault.noneAccessible")
+                  : root.statusLabel() + " — " + tr("vault.hintLockedOrOut")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -405,7 +419,7 @@ Panel {
           Text {
             visible: root.view === "vaults" && pass.itemsLoading
             width: parent.width
-            text: "Chargement des coffres…"
+            text: tr("vault.loading")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -434,8 +448,8 @@ Panel {
             width: parent.width
             topPadding: Style.space(8)
             text: pass.items.length === 0
-                  ? "Aucun élément dans les coffres."
-                  : "Aucun élément ici."
+                  ? tr("items.noneAtAll")
+                  : tr("items.noneHere")
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -590,7 +604,7 @@ Panel {
         iconText: "\uE7FD"                       // person = username
         foreground: root.dim
         hoverColor: root.foreground
-        tooltipText: "Copier l'identifiant"
+        tooltipText: root.tr("copy.username")
         visible: !!row.item && row.item.itemType === "login"
         onClicked: row.copiedField("username")
       }
@@ -599,7 +613,7 @@ Panel {
         iconText: "\uF023"                       // lock = password
         foreground: root.dim
         hoverColor: root.foreground
-        tooltipText: "Copier le mot de passe"
+        tooltipText: root.tr("copy.password")
         visible: !!row.item && row.item.itemType === "login"
         onClicked: row.copiedField("password")
       }
@@ -608,7 +622,7 @@ Panel {
         iconText: "\uF021"                       // refresh = TOTP
         foreground: root.dim
         hoverColor: root.foreground
-        tooltipText: "Copier le code TOTP"
+        tooltipText: root.tr("copy.totp")
         visible: !!row.item && row.item.itemType === "login" && pass.showTotp
         onClicked: row.copiedField("totp")
       }
@@ -647,7 +661,7 @@ Panel {
     Text {
       visible: pass.detailLoading
       width: parent.width
-      text: "Déchiffrement de l'élément…"
+      text: tr("detail.decrypting")
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
@@ -677,7 +691,7 @@ Panel {
     Text {
       visible: !pass.detailLoading && pass.detailFields.length === 0 && pass.detailError === ""
       width: parent.width
-      text: "Aucun champ affichable."
+      text: tr("detail.noFields")
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
@@ -726,7 +740,7 @@ Panel {
           if (!frow.field) return ""
           if (frow.field.hidden) return "••••••••"
           var v = String(frow.field.value || "")
-          return v === "" ? "(vide)" : (v.length > 64 ? v.substring(0, 61) + "…" : v)
+          return v === "" ? tr("field.empty") : (v.length > 64 ? v.substring(0, 61) + "…" : v)
         }
         color: root.foreground
         font.family: root.fontFamily
@@ -756,7 +770,7 @@ Panel {
       anchors.verticalCenter: parent.verticalCenter
       foreground: root.dim
       hoverColor: root.foreground
-      tooltipText: "Copier la valeur"
+      tooltipText: root.tr("field.copyValue")
       onClicked: frow.copied()
     }
 
