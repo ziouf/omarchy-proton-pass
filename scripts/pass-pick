@@ -30,6 +30,9 @@ if [[ "$lang" == "fr" ]]; then
   a_totp="Copier le code TOTP"
   a_autotype="Autotype (identifiant ⇥ mot de passe)"
   a_detail="Ouvrir le détail dans le panneau"
+  lbl_login="Connexion"; lbl_alias="Alias"; lbl_note="Note sécurisée"
+  lbl_card="Carte bancaire"; lbl_identity="Identité"; lbl_ssh="Clé SSH"
+  lbl_wifi="Wi-Fi"; lbl_other="Autre"
   msg_cache_fail="Cache Proton Pass indisponible"
   msg_cache_fail_body="Lancement du rafraîchissement… réessaie dans un instant."
   msg_stale="Cache Proton Pass périmé"
@@ -42,6 +45,9 @@ elif [[ "$lang" == "zh" ]]; then
   a_totp="复制 TOTP 验证码"
   a_autotype="自动输入（用户名 ⇥ 密码）"
   a_detail="在面板中打开详情"
+  lbl_login="登录"; lbl_alias="别名"; lbl_note="安全笔记"
+  lbl_card="银行卡"; lbl_identity="身份信息"; lbl_ssh="SSH 密钥"
+  lbl_wifi="Wi-Fi"; lbl_other="其他"
   msg_cache_fail="Proton Pass 缓存不可用"
   msg_cache_fail_body="正在刷新…请稍后重试。"
   msg_stale="Proton Pass 缓存已过期"
@@ -54,6 +60,9 @@ else
   a_totp="Copy TOTP code"
   a_autotype="Autotype (username ⇥ password)"
   a_detail="Open details in the panel"
+  lbl_login="Login"; lbl_alias="Alias"; lbl_note="Secure note"
+  lbl_card="Credit card"; lbl_identity="Identity"; lbl_ssh="SSH key"
+  lbl_wifi="Wi-Fi"; lbl_other="Other"
   msg_cache_fail="Proton Pass cache unavailable"
   msg_cache_fail_body="Refreshing now… try again in a moment."
   msg_stale="Proton Pass cache is stale"
@@ -78,13 +87,24 @@ fi
 labels_tsv="$(mktemp)"
 trap 'rm -f "$labels_tsv" "$sel_file" "$done_file"' EXIT
 
-jq -r '.items[] | [.title, .vault, .shareId, .itemId] | @tsv' "$CACHE" \
+jq -r \
+  --arg l_login "$lbl_login" --arg l_alias "$lbl_alias" --arg l_note "$lbl_note" \
+  --arg l_card "$lbl_card" --arg l_identity "$lbl_identity" --arg l_ssh "$lbl_ssh" \
+  --arg l_wifi "$lbl_wifi" --arg l_other "$lbl_other" \
+  '
+  def typelabel:
+    { "login": $l_login, "alias": $l_alias, "note": $l_note,
+      "credit_card": $l_card, "creditcard": $l_card, "identity": $l_identity,
+      "ssh_key": $l_ssh, "sshkey": $l_ssh, "wifi": $l_wifi
+    }[. // ""] // $l_other;
+  .items[] | [.title, (.itemType | typelabel), .vault, .shareId, .itemId] | @tsv
+  ' "$CACHE" \
 | awk -F'\t' '
   {
-    label = $1 " — " $2
+    label = $1 " · " $2 " — " $3
     seen[label]++
     if (seen[label] > 1) label = label " · " seen[label]
-    print label "\t" $3 "|" $4
+    print label "\t" $4 "|" $5
   }' > "$labels_tsv"
 
 if [[ ! -s "$labels_tsv" ]]; then
