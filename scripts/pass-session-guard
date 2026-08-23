@@ -1,0 +1,35 @@
+#!/bin/bash
+# pass-session-guard — keep the Proton Pass CLI session in step with the
+# desktop. When the Omarchy session locks (keybind, idle, or any other path),
+# lock the pass-cli session too, so secrets stay gated behind the lock code.
+#
+# Runs as a systemd user service; polls the shell's lock state every few
+# seconds and reacts to unlocked -> locked transitions.
+
+set -u
+
+POLL_INTERVAL="${PASS_GUARD_POLL_INTERVAL:-3}"
+
+last_state=""
+while true; do
+  if [[ "$(omarchy-shell lock isLocked 2>/dev/null)" == "true" ]]; then
+    state="locked"
+  else
+    state="unlocked"
+  fi
+
+  if [[ "$state" == "locked" && "$last_state" != "locked" ]]; then
+    # Only meaningful when a session exists AND a lock code has been created:
+    # `session lock` fails otherwise, which is fine but noisy in the journal.
+    if timeout 15 pass-cli info 2>/dev/null | grep -qi 'has lock: *yes'; then
+      if ! timeout 15 pass-cli session lock >/dev/null 2>&1; then
+        echo "pass-cli session lock failed" >&2
+      else
+        echo "Proton Pass session locked (screen locked at $(date '+%H:%M:%S'))"
+      fi
+    fi
+  fi
+
+  last_state="$state"
+  sleep "$POLL_INTERVAL"
+done

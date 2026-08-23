@@ -1,0 +1,34 @@
+#!/bin/bash
+# copy-value — put an already-decrypted value on the clipboard.
+# usage: copy-value <buffer-file> <label> [kind] [clear-after-seconds]
+#
+# The value is read from a 0600 file in XDG_RUNTIME_DIR (tmpfs), never passed
+# as a process argument. The buffer file is removed immediately after the
+# copy, and the clipboard is cleared after the optional delay if our value is
+# still what sits there.
+
+set -euo pipefail
+
+file="${1:?usage: copy-value <buffer-file> <label> [kind] [clear-after-seconds]}"
+label="${2:?}"
+kind="${3:-valeur}"
+clear_after="${4:-30}"
+
+command -v wl-copy >/dev/null 2>&1 || exit 1
+[[ -f $file ]] || exit 1
+
+secret="$(cat "$file")"
+shred -u "$file" 2>/dev/null || rm -f "$file"
+
+printf '%s' "$secret" | wl-copy
+
+if [[ "$clear_after" =~ ^[0-9]+$ ]] && (( clear_after > 0 )); then
+  (
+    sleep "$clear_after"
+    current="$(wl-paste 2>/dev/null || true)"
+    [[ "$current" == "$secret" ]] && wl-copy --clear || true
+  ) &
+  disown
+fi
+
+notify-send -a "Proton Pass" -t 2000 "Copié" "$kind « ${label} » (${clear_after} s)" 2>/dev/null || true

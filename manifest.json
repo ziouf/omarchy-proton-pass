@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "id": "ziouf.proton-pass",
+  "name": "Proton Pass",
+  "version": "1.0.0",
+  "author": "ziouf",
+  "license": "MIT",
+  "description": "Proton Pass CLI as a system-wide secret provider: session status in the bar, vault navigation with typed items, field-level detail view, clipboard copy with auto-clear, SSH agent service and lock-on-screen-lock integration.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Pass.qml"
+  },
+  "barWidget": {
+    "displayName": "Proton Pass",
+    "description": "Proton Pass CLI session status with a panel to browse vaults, search typed items (login, alias, note, card, identity, SSH key, Wi-Fi), inspect fields, and copy usernames, passwords, URLs, TOTP codes and custom fields. Right click locks the pass-cli session.",
+    "category": "Security",
+    "aliases": [
+      "pass",
+      "secrets",
+      "passwords",
+      "proton-pass"
+    ],
+    "allowMultiple": false,
+    "defaults": {
+      "refreshIntervalSec": 60,
+      "clipboardTimeoutSec": 30,
+      "showTotp": true
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Status refresh interval (seconds)",
+        "min": 15,
+        "max": 900,
+        "step": 15,
+        "defaultValue": 60
+      },
+      {
+        "key": "clipboardTimeoutSec",
+        "type": "integer",
+        "label": "Clear clipboard after (seconds, 0 = never)",
+        "min": 0,
+        "max": 300,
+        "step": 5,
+        "defaultValue": 30
+      },
+      {
+        "key": "showTotp",
+        "type": "boolean",
+        "label": "Offer TOTP copy action",
+        "defaultValue": true
+      }
+    ]
+  }
+}

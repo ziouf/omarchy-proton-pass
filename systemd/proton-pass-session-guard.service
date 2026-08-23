@@ -1,0 +1,10 @@
+[Unit]
+Description=Lock the Proton Pass CLI session when the desktop locks
+
+[Service]
+ExecStart=%h/.config/omarchy/plugins/ziouf.proton-pass/scripts/pass-session-guard
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
