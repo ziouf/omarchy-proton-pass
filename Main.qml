@@ -690,9 +690,13 @@ Item {
   }
 
   // Terminal flows (login, unlock) need interactive prompts, so they open in
-  // their own floating terminal instead of a background process.
+  // their own floating terminal instead of a background process. The terminal
+  // inherits the session environment, which may predate the installer's
+  // environment.d drop-in, so pin the persistent-keyring backend here: with
+  // the default kernel keyring the session dies at the next reboot.
   function launchTerminal(command) {
-    Quickshell.execDetached(["omarchy-launch-floating-terminal-with-presentation", command])
+    var prefix = "export PROTON_PASS_LINUX_KEYRING=${PROTON_PASS_LINUX_KEYRING:-dbus}; "
+    Quickshell.execDetached(["omarchy-launch-floating-terminal-with-presentation", prefix + command])
   }
 
   function login() { launchTerminal("pass-cli login") }

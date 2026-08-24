@@ -9,6 +9,10 @@
 
 set -euo pipefail
 
+# Keep the encryption key in the Secret Service so sessions survive reboots;
+# the kernel keyring default is wiped at every boot. Respect an explicit override.
+export PROTON_PASS_LINUX_KEYRING="${PROTON_PASS_LINUX_KEYRING:-dbus}"
+
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ziouf.proton-pass"
 mkdir -p "$CACHE_DIR"
 chmod 700 "$CACHE_DIR"

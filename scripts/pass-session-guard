@@ -8,6 +8,10 @@
 
 set -u
 
+# Keep the encryption key in the Secret Service so sessions survive reboots;
+# the kernel keyring default is wiped at every boot. Respect an explicit override.
+export PROTON_PASS_LINUX_KEYRING="${PROTON_PASS_LINUX_KEYRING:-dbus}"
+
 POLL_INTERVAL="${PASS_GUARD_POLL_INTERVAL:-5}"
 
 last_state=""
