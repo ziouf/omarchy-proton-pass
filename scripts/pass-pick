@@ -240,7 +240,9 @@ jq -r \
 jq -r '
   (.item.content.extra_fields // [])[]
   | ((.content // .value // "")
-     | if type == "object" then (.Text // tostring) else . end) as $v
+     | if type == "object"
+       then ([.[] | select(type == "string" and length > 0)][0] // "")
+       else . end) as $v
   | select(($v // "") != "")
   | [ ((if ((.type // "") == "hidden") then "• " else "" end) + (.label // .name // "field")),
       "extra:" + (.label // .name // "field") ]
@@ -309,7 +311,9 @@ case "$dispatch" in
       (.item.content.extra_fields // [])[]
       | select(((.label // .name // "") == $l))
       | ((.content // .value // "")
-         | if type == "object" then (.Text // tostring) else . end)' <<<"$item_json")"
+         | if type == "object"
+           then ([.[] | select(type == "string" and length > 0)][0] // "")
+           else . end)' <<<"$item_json")"
     buffered_copy "$value" "$label" "secret"
     ;;
   autotype)

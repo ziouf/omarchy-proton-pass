@@ -446,6 +446,17 @@ Item {
     root.detailErrCapture = ""
   }
 
+  // Extra-field content is typed: {"Text": "…"} / {"Hidden": "…"} — take the
+  // first non-empty string value instead of stringifying the wrapper object.
+  function flattenExtraContent(c) {
+    if (c === null || c === undefined) return ""
+    if (typeof c !== "object") return String(c)
+    for (var k in c) {
+      if (typeof c[k] === "string" && c[k] !== "") return c[k]
+    }
+    return ""
+  }
+
   function prettifyKey(key) {
     // Known keys translate through the catalog; unknown ones fall back to a
     // capitalized raw name.
@@ -518,9 +529,8 @@ Item {
     for (var e = 0; e < extras.length && rows.length < root.maxDetailFields; e++) {
       var extra = extras[e] || {}
       var label = truncate(extra.label || extra.name || tr("field.extraFallback"), 128)
-      var value = ""
-      if (extra.content !== undefined && extra.content !== null) value = String(extra.content)
-      else if (extra.value !== undefined && extra.value !== null) value = String(extra.value)
+      var value = flattenExtraContent(extra.content)
+      if (value === "") value = flattenExtraContent(extra.value)
       if (value === "") continue
       value = truncate(value, maxValueChars)
       var hiddenField = String(extra.type || "").toLowerCase() === "hidden"

@@ -142,6 +142,8 @@ Panel {
     root.currentItem = item
     pass.loadDetail(item)
     view = "detail"
+    console.log("ziouf.proton-pass/openDetail view=detail item=" +
+                JSON.stringify(item ? item.title : ""))
   }
 
   property string pendingOpenItemId: ""
@@ -152,16 +154,20 @@ Panel {
   // retried once the item list lands instead of leaving the panel on vaults.
   function openItemById(id) {
     var wanted = String(id || "")
+    console.log("ziouf.proton-pass/openItem id.len=" + wanted.length +
+                " items=" + pass.items.length + " opened=" + opened)
     root.open()
     if (wanted === "") return
     for (var i = 0; i < pass.items.length; i++) {
       if (pass.items[i].itemId === wanted) {
+        console.log("ziouf.proton-pass/openItem found → detail")
         currentVault = ""
         openDetail(pass.items[i])
         pendingOpenItemId = ""
         return
       }
     }
+    console.log("ziouf.proton-pass/openItem NOT found yet → refresh + retry")
     pendingOpenItemId = wanted
     refreshNow()
   }
