@@ -95,7 +95,9 @@ for step in "${plan[@]}"; do
     env)
       echo "→ export SSH_AUTH_SOCK session-wide"
       mkdir -p "$ENV_DIR"
-      printf 'SSH_AUTH_SOCK=%%h/.ssh/proton-pass-agent.sock\n' > "$ENV_DIR/90-proton-pass.conf"
+      # environment.d does not expand systemd specifiers (%h), so bake the
+      # absolute home path at install time.
+      printf 'SSH_AUTH_SOCK=%s\n' "$HOME/.ssh/proton-pass-agent.sock" > "$ENV_DIR/90-proton-pass.conf"
       ;;
     daemon-reload)
       echo "→ systemctl --user daemon-reload"
