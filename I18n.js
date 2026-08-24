@@ -6,6 +6,7 @@
 
 var catalogs = {
   en: {
+    "error.detailTimeout": "The request timed out — try again.",
     "search.reset": "Reset search",
     // Session states
     "status.unlocked": "Session unlocked",
@@ -97,6 +98,7 @@ var catalogs = {
   },
 
   zh: {
+    "error.detailTimeout": "请求超时 — 请重试。",
     "search.reset": "重置搜索",
     // Session states
     "status.unlocked": "会话已解锁",
@@ -188,6 +190,7 @@ var catalogs = {
   },
 
   fr: {
+    "error.detailTimeout": "Délai dépassé — réessaie.",
     "search.reset": "Réinitialiser la recherche",
     "status.unlocked": "Session déverrouillée",
     "status.locked": "Session verrouillée",

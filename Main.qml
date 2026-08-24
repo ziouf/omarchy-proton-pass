@@ -10,11 +10,11 @@ import "I18n.js" as I18n
 //   account    signed-in email, when known
 //   items      [{ itemId, shareId, vault, title, hasTotp }]
 //
-// The session probe is `pass-cli info`: exit 0 means a local session exists.
-// A locked session makes API calls fail with a "locked" complaint, and that
-// wording is what separates locked from logged-out. Listing items needs a
-// vault, so a full refresh walks `vault list` and then `item list` per vault,
-// keeping only Active entries.
+// Resource limits (marketplace security baseline): every pass-cli command
+// runs under coreutils `timeout` (hard producer-side deadline — Quickshell
+// Process exposes no kill), stream captures are capped, and the item/detail
+// models are bounded so a hung or hostile CLI can neither stall the
+// long-lived shell nor retain unbounded secret material.
 
 Item {
   id: root
@@ -24,6 +24,54 @@ Item {
 
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string scriptDir: home + "/.config/omarchy/plugins/ziouf.proton-pass/scripts"
+
+  property string status: "checking"
+  property string account: ""
+  property bool hasLockCode: false
+  property var items: []
+  property var vaults: []
+  property bool itemsLoading: false
+  property int dataRevision: 0
+
+  // Item detail (third navigation level).
+  property var currentItem: null
+  property var detailFields: []
+  property bool detailLoading: false
+  property string detailError: ""
+
+  // ------------------------------------------------------- resource limits
+  readonly property int maxCaptureChars: 2 * 1024 * 1024  // per stream, 2 MiB
+  readonly property int maxErrCaptureChars: 16 * 1024     // per stderr stream
+  readonly property int maxItems: 2000
+  readonly property int maxVaults: 64
+  readonly property int maxDetailFields: 64
+  readonly property int maxValueChars: 4096
+  readonly property int probeDeadlineSec: 15
+  readonly property int walkLegDeadlineSec: 45
+  readonly property int detailDeadlineSec: 25
+  readonly property int actionDeadlineSec: 60
+
+  // Hard producer-side deadline: coreutils timeout TERMinates the command
+  // (KILL 5 s later); onExited then sees exit code 124.
+  function timed(sec, cmd) {
+    return ["timeout", "--signal=TERM", "--kill-after=5", String(sec)].concat(cmd)
+  }
+
+  function truncate(value, maxChars) {
+    var s = String(value === undefined || value === null ? "" : value)
+    return s.length > maxChars ? s.substring(0, maxChars) : s
+  }
+
+  // ------------------------------------------------------------- settings
+
+  function setting(name, fallback) {
+    var value = settings ? settings[name] : undefined
+    return value === undefined || value === null ? fallback : value
+  }
+
+  readonly property int refreshIntervalSec: Math.max(15, Number(setting("refreshIntervalSec", 60)))
+  readonly property int clipboardTimeoutSec: Number(setting("clipboardTimeoutSec", 30))
+  readonly property bool showTotp: setting("showTotp", true) !== false
 
   // System locale drives the UI language (LC_ALL > LC_MESSAGES > LANG >
   // Qt locale); English doubles as the fallback catalog.
@@ -40,31 +88,6 @@ Item {
     return out
   }
 
-  property string status: "checking"
-  property string account: ""
-  property bool hasLockCode: false
-  property var items: []
-  property var vaults: []
-  property bool itemsLoading: false
-  property int dataRevision: 0
-
-  // Item detail (third navigation level).
-  property var currentItem: null
-  property var detailFields: []
-  property bool detailLoading: false
-  property string detailError: ""
-
-  // ------------------------------------------------------------- settings
-
-  function setting(name, fallback) {
-    var value = settings ? settings[name] : undefined
-    return value === undefined || value === null ? fallback : value
-  }
-
-  readonly property int refreshIntervalSec: Math.max(15, Number(setting("refreshIntervalSec", 60)))
-  readonly property int clipboardTimeoutSec: Number(setting("clipboardTimeoutSec", 30))
-  readonly property bool showTotp: setting("showTotp", true) !== false
-
   Timer {
     interval: root.refreshIntervalSec * 1000
     running: true
@@ -75,20 +98,24 @@ Item {
 
   // -------------------------------------------------------- session probe
 
-  property string probeStdout: ""
-  property string probeStderr: ""
+  property string probeCapture: ""
+  property string probeErrCapture: ""
 
   Process {
     id: probeProcess
     running: false
 
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.probeStdout = text
+    stdout: SplitParser {
+      onRead: function(data) {
+        if (root.probeCapture.length < root.maxCaptureChars)
+          root.probeCapture += data + "\n"
+      }
     }
-    stderr: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.probeStderr = text
+    stderr: SplitParser {
+      onRead: function(data) {
+        if (root.probeErrCapture.length < root.maxErrCaptureChars)
+          root.probeErrCapture += data + "\n"
+      }
     }
 
     onExited: function(exitCode) {
@@ -98,16 +125,18 @@ Item {
 
   function probeSession() {
     if (probeProcess.running) return
-    probeStdout = ""
-    probeStderr = ""
-    probeProcess.command = ["pass-cli", "info"]
+    probeCapture = ""
+    probeErrCapture = ""
+    probeProcess.command = root.timed(root.probeDeadlineSec, ["pass-cli", "info"])
     probeProcess.running = true
   }
 
   function applyProbe(exitCode) {
-    var out = String(root.probeStdout || "")
-    var err = String(root.probeStderr || "")
+    var out = String(root.probeCapture || "")
+    var err = String(root.probeErrCapture || "")
     var combined = (out + "\n" + err).toLowerCase()
+    root.probeCapture = ""
+    root.probeErrCapture = ""
 
     // pass-cli info exits 0 even when it fails ("Command is not logout there
     // is no session"), so the text decides first — most importantly after a
@@ -141,8 +170,8 @@ Item {
         root.status = "logged-out"
         root.account = ""
       } else {
-        // An unknown failure (offline, update pending…) keeps the last known
-        // state rather than flapping the bar icon on every transient error.
+        // An unknown failure (offline, deadline, update pending…) keeps the
+        // last known state rather than flapping the bar icon.
         if (root.status === "checking") root.status = "logged-out"
       }
       return
@@ -160,20 +189,27 @@ Item {
   // accumulated in itemAccumulator and published once the last vault lands.
   property var pendingVaults: []
   property var itemAccumulator: []
+  property string walkKind: ""          // "vaults" | "items"
+  property string currentWalkVault: ""
 
-  property string processStdout: ""
+  property string processCapture: ""
+  property string processErrCapture: ""
 
   Process {
     id: walkProcess
     running: false
 
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.processStdout = text
+    stdout: SplitParser {
+      onRead: function(data) {
+        if (root.processCapture.length < root.maxCaptureChars)
+          root.processCapture += data + "\n"
+      }
     }
-    stderr: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: if (text.trim() !== "") console.warn("ziouf.proton-pass", text.trim())
+    stderr: SplitParser {
+      onRead: function(data) {
+        if (root.processErrCapture.length < root.maxErrCaptureChars)
+          root.processErrCapture += data + "\n"
+      }
     }
 
     onExited: function(exitCode) { root.walkExited(exitCode) }
@@ -183,14 +219,19 @@ Item {
     if (walkProcess.running) return
     root.itemsLoading = true
     root.itemAccumulator = []
-    root.processStdout = ""
-    walkProcess.command = ["pass-cli", "vault", "list", "--output", "json"]
+    root.processCapture = ""
+    root.processErrCapture = ""
+    root.walkKind = "vaults"
+    walkProcess.command = root.timed(root.walkLegDeadlineSec,
+                                     ["pass-cli", "vault", "list", "--output", "json"])
     walkProcess.running = true
   }
 
   function walkExited(exitCode) {
-    var output = String(root.processStdout)
-    root.processStdout = ""
+    var output = String(root.processCapture)
+    root.processCapture = ""
+    var errText = String(root.processErrCapture)
+    root.processErrCapture = ""
 
     console.log("ziouf.proton-pass/walk exit=" + exitCode +
                 " itemRun=" + isItemListRun() +
@@ -201,6 +242,8 @@ Item {
     if (exitCode !== 0) {
       root.itemsLoading = false
       root.pendingVaults = []
+      if (exitCode === 124 || errText.toLowerCase().indexOf("timed out") >= 0)
+        console.warn("ziouf.proton-pass", "walk leg exceeded its deadline")
       applyProbe(exitCode)
       return
     }
@@ -229,11 +272,10 @@ Item {
     }
   }
 
-  // The walk reuses one Process for both command kinds; remember which kind
-  // produced the output we are holding.
+  // The walk reuses one Process for both command kinds; the timed() wrapper
+  // shifts argv, so the kind is tracked explicitly instead of read back.
   function isItemListRun() {
-    var cmd = walkProcess.command || []
-    return cmd[1] === "item"
+    return root.walkKind === "items"
   }
 
   function runNextVault() {
@@ -242,8 +284,12 @@ Item {
       return
     }
     var vaultName = root.pendingVaults.shift()
-    root.processStdout = ""
-    walkProcess.command = ["pass-cli", "item", "list", vaultName, "--output", "json"]
+    root.processCapture = ""
+    root.processErrCapture = ""
+    root.walkKind = "items"
+    root.currentWalkVault = vaultName
+    walkProcess.command = root.timed(root.walkLegDeadlineSec,
+                                     ["pass-cli", "item", "list", vaultName, "--output", "json"])
     walkProcess.running = true
   }
 
@@ -257,8 +303,8 @@ Item {
     }
     var arr = Array.isArray(parsed) ? parsed : (parsed && parsed.vaults ? parsed.vaults : [])
     var names = []
-    for (var i = 0; i < arr.length; i++) {
-      var name = String(arr[i] && arr[i].name ? arr[i].name : "").trim()
+    for (var i = 0; i < arr.length && names.length < root.maxVaults; i++) {
+      var name = truncate(arr[i] && arr[i].name ? arr[i].name : "", 128).trim()
       if (name !== "") names.push(name)
     }
     return names
@@ -273,18 +319,22 @@ Item {
       return
     }
     var arr = Array.isArray(parsed) ? parsed : (parsed && parsed.items ? parsed.items : [])
-    var currentVault = String(walkProcess.command[3] || "")
+    var currentVault = String(root.currentWalkVault || "")
     for (var i = 0; i < arr.length; i++) {
+      if (root.itemAccumulator.length >= root.maxItems) {
+        console.warn("ziouf.proton-pass", "item cap reached, ignoring the rest")
+        return
+      }
       var raw = arr[i] || {}
       if (String(raw.state || "Active").toLowerCase() === "trashed") continue
-      var title = String(raw.title || "").trim()
+      var title = truncate(raw.title, 256).trim()
       if (title === "") continue
       root.itemAccumulator.push({
-        itemId: String(raw.id || ""),
-        shareId: String(raw.share_id || raw.shareId || ""),
-        vault: currentVault,
+        itemId: truncate(raw.id, 256),
+        shareId: truncate(raw.share_id || raw.shareId, 256),
+        vault: truncate(currentVault, 128),
         title: title,
-        itemType: String(raw.item_type || raw.type || ""),
+        itemType: truncate(raw.item_type || raw.type, 32),
         username: "",
         hasTotp: undefined
       })
@@ -312,28 +362,41 @@ Item {
 
   // --------------------------------------------------------- item detail
 
-  property string detailStdout: ""
+  property string detailCapture: ""
+  property string detailErrCapture: ""
 
   Process {
     id: detailProcess
     running: false
 
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.detailStdout = text
+    stdout: SplitParser {
+      onRead: function(data) {
+        if (root.detailCapture.length < root.maxCaptureChars)
+          root.detailCapture += data + "\n"
+      }
     }
-    stderr: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: if (text.trim() !== "") console.warn("ziouf.proton-pass/detail", text.trim())
+    stderr: SplitParser {
+      onRead: function(data) {
+        if (root.detailErrCapture.length < root.maxErrCaptureChars)
+          root.detailErrCapture += data + "\n"
+      }
     }
 
     onExited: function(exitCode) {
       root.detailLoading = false
+      var capture = String(root.detailCapture)
+      root.detailCapture = ""
+      root.detailErrCapture = ""
+
+      if (exitCode === 124) {
+        root.detailError = root.tr("error.detailTimeout")
+        return
+      }
       if (exitCode !== 0) {
         root.detailError = root.tr("error.detailRead")
         return
       }
-      root.parseDetail(root.detailStdout)
+      root.parseDetail(capture)
     }
   }
 
@@ -343,12 +406,25 @@ Item {
     root.detailFields = []
     root.detailError = ""
     root.detailLoading = true
-    root.detailStdout = ""
+    root.detailCapture = ""
+    root.detailErrCapture = ""
     var vault = String(item.shareId || item.vault || "")
     var ref = String(item.itemId || item.title || "")
-    detailProcess.command = ["pass-cli", "item", "view", "--output", "json",
-                             "pass://" + vault + "/" + ref]
+    detailProcess.command = root.timed(root.detailDeadlineSec,
+                                       ["pass-cli", "item", "view", "--output", "json",
+                                        "pass://" + vault + "/" + ref])
     detailProcess.running = true
+  }
+
+  // Drop decrypted material from memory (panel close, navigation away).
+  function clearDetail() {
+    detailProcess.command = []
+    root.currentItem = null
+    root.detailFields = []
+    root.detailError = ""
+    root.detailLoading = false
+    root.detailCapture = ""
+    root.detailErrCapture = ""
   }
 
   function prettifyKey(key) {
@@ -385,19 +461,23 @@ Item {
     }
 
     if (String(content.note || "").trim() !== "") {
-      rows.push({ label: tr("field.note"), field: "", value: String(content.note), hidden: false, multiline: true })
+      rows.push({ label: tr("field.note"), field: "", value: truncate(content.note, maxValueChars), hidden: false, multiline: true })
     }
 
     if (typeObj) {
       for (var f in typeObj) {
+        if (rows.length >= root.maxDetailFields) {
+          console.warn("ziouf.proton-pass", "detail field cap reached")
+          break
+        }
         var v = typeObj[f]
         if (v === null || v === undefined || v === "") continue
         if (Array.isArray(v)) {
           var strs = []
-          for (var i = 0; i < v.length; i++)
-            if (typeof v[i] === "string" && v[i] !== "") strs.push(v[i])
+          for (var i = 0; i < v.length && strs.length < 8; i++)
+            if (typeof v[i] === "string" && v[i] !== "") strs.push(truncate(v[i], 512))
           if (strs.length > 0)
-            rows.push({ label: prettifyKey(f), field: f, value: strs.join("\n"),
+            rows.push({ label: prettifyKey(f), field: truncate(f, 128), value: strs.join("\n"),
                         hidden: false, multiline: strs.join("\n").length > 48 })
         } else if (typeof v === "object") {
           continue
@@ -405,22 +485,23 @@ Item {
           rows.push({ label: tr("field.totp"), field: "totp", value: tr("totp.currentHint"),
                       hidden: false, multiline: false })
         } else {
-          var text = String(v)
+          var text = truncate(v, maxValueChars)
           var hiddenKey = /password|secret|cvv|private|pin/i.test(f)
-          rows.push({ label: prettifyKey(f), field: f, value: text,
+          rows.push({ label: prettifyKey(f), field: truncate(f, 128), value: text,
                       hidden: hiddenKey, multiline: !hiddenKey && text.length > 48 })
         }
       }
     }
 
     var extras = Array.isArray(content.extra_fields) ? content.extra_fields : []
-    for (var e = 0; e < extras.length; e++) {
+    for (var e = 0; e < extras.length && rows.length < root.maxDetailFields; e++) {
       var extra = extras[e] || {}
-      var label = String(extra.label || extra.name || tr("field.extraFallback"))
+      var label = truncate(extra.label || extra.name || tr("field.extraFallback"), 128)
       var value = ""
       if (extra.content !== undefined && extra.content !== null) value = String(extra.content)
       else if (extra.value !== undefined && extra.value !== null) value = String(extra.value)
       if (value === "") continue
+      value = truncate(value, maxValueChars)
       var hiddenField = String(extra.type || "").toLowerCase() === "hidden"
       rows.push({ label: label, field: label, value: value,
                   hidden: hiddenField, multiline: !hiddenField && value.length > 48 })
@@ -451,63 +532,6 @@ Item {
     printErrors: false
   }
 
-  // ------------------------------------------------------- metadata cache
-  //
-  // The picker and the panel both want items without waiting for a full
-  // vault walk. pass-cache-update (systemd timer) and publishItems() keep
-  // this file current; at startup we hydrate from it instantly, then the
-  // regular walk replaces the data with live values.
-  readonly property string cachePath: (Quickshell.env("XDG_CACHE_HOME") || home + "/.cache")
-                                      + "/ziouf.proton-pass/items.json"
-
-  FileView {
-    id: cacheFile
-    path: root.cachePath
-    watchChanges: false
-    atomicWrites: true
-    printErrors: false
-    onLoaded: root.parseCache(text())
-  }
-
-  function parseCache(output) {
-    var parsed = null
-    try {
-      parsed = JSON.parse(String(output || ""))
-    } catch (e) {
-      return
-    }
-    if (!parsed || !Array.isArray(parsed.items)) return
-
-    var result = []
-    for (var i = 0; i < parsed.items.length; i++) {
-      var raw = parsed.items[i] || {}
-      var title = String(raw.title || "").trim()
-      if (title === "") continue
-      result.push({
-        itemId: String(raw.itemId || ""),
-        shareId: String(raw.shareId || ""),
-        vault: String(raw.vault || ""),
-        title: title,
-        itemType: String(raw.itemType || ""),
-        username: "",
-        hasTotp: undefined
-      })
-    }
-    root.vaults = Array.isArray(parsed.vaults) ? parsed.vaults : []
-    root.items = result
-    root.dataRevision++
-  }
-
-  function writeCache() {
-    var payload = {
-      schemaVersion: 1,
-      updatedAt: new Date().toISOString(),
-      vaults: root.vaults,
-      items: root.items
-    }
-    cacheFile.setText(JSON.stringify(payload))
-  }
-
   Process {
     id: bufferCopyProcess
     running: false
@@ -517,9 +541,10 @@ Item {
     if (!Quickshell.env("XDG_RUNTIME_DIR")) return
     bufferFile.setText(String(value))
     Qt.callLater(function() {
-      bufferCopyProcess.command = [scriptDir + "/copy-value", bufferPath,
-                                   label, hidden ? "secret" : "value",
-                                   String(timeoutSec)]
+      bufferCopyProcess.command = root.timed(root.actionDeadlineSec,
+                                             [scriptDir + "/copy-value", bufferPath,
+                                              truncate(label, 128), hidden ? "secret" : "value",
+                                              String(timeoutSec)])
       bufferCopyProcess.running = true
     })
   }
@@ -534,9 +559,10 @@ Item {
     id: actionProcess
     running: false
 
-    stderr: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: if (text.trim() !== "") console.warn("ziouf.proton-pass/action", text.trim())
+    stderr: SplitParser {
+      onRead: function(data) {
+        if (data.length <= 4096) console.warn("ziouf.proton-pass/action", truncate(data, 512).trim())
+      }
     }
 
     onExited: function(exitCode) {
@@ -583,7 +609,7 @@ Item {
   function runAction(command, label) {
     if (actionProcess.running) return
     root.actionProcessLabel = label
-    actionProcess.command = command
+    actionProcess.command = root.timed(root.actionDeadlineSec, command)
     actionProcess.running = true
   }
 
@@ -616,6 +642,63 @@ Item {
   function notify(summary, body, urgency) {
     Quickshell.execDetached(["notify-send", "-a", "Proton Pass", "-t", "4000",
                              "-u", urgency || "normal", summary, body || ""])
+  }
+
+  // ------------------------------------------------------- metadata cache
+  //
+  // The picker and the panel both want items without waiting for a full
+  // vault walk. pass-cache-update (systemd timer) and publishItems() keep
+  // this file current; at startup we hydrate from it instantly, then the
+  // regular walk replaces the data with live values.
+  readonly property string cachePath: (Quickshell.env("XDG_CACHE_HOME") || home + "/.cache")
+                                      + "/ziouf.proton-pass/items.json"
+
+  FileView {
+    id: cacheFile
+    path: root.cachePath
+    watchChanges: false
+    atomicWrites: true
+    printErrors: false
+    onLoaded: root.parseCache(text())
+  }
+
+  function parseCache(output) {
+    var parsed = null
+    try {
+      parsed = JSON.parse(String(output || ""))
+    } catch (e) {
+      return
+    }
+    if (!parsed || !Array.isArray(parsed.items)) return
+
+    var result = []
+    for (var i = 0; i < parsed.items.length && result.length < root.maxItems; i++) {
+      var raw = parsed.items[i] || {}
+      var title = truncate(raw.title, 256).trim()
+      if (title === "") continue
+      result.push({
+        itemId: truncate(raw.itemId, 256),
+        shareId: truncate(raw.shareId, 256),
+        vault: truncate(raw.vault, 128),
+        title: title,
+        itemType: truncate(raw.itemType, 32),
+        username: "",
+        hasTotp: undefined
+      })
+    }
+    root.vaults = Array.isArray(parsed.vaults) ? parsed.vaults.slice(0, root.maxVaults) : []
+    root.items = result
+    root.dataRevision++
+  }
+
+  function writeCache() {
+    var payload = {
+      schemaVersion: 1,
+      updatedAt: new Date().toISOString(),
+      vaults: root.vaults,
+      items: root.items
+    }
+    cacheFile.setText(JSON.stringify(payload))
   }
 
   Component.onCompleted: probeSession()

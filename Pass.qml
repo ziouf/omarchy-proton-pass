@@ -156,7 +156,7 @@ Panel {
   }
 
   function goBack() {
-    if (view === "detail") view = "items"
+    if (view === "detail") { view = "items"; pass.clearDetail() }
     else if (view === "items") { view = "vaults"; currentVault = ""; query = "" }
     else close()
   }
@@ -220,6 +220,9 @@ Panel {
     // Typing goes straight to the filter; the key catcher stays as a
     // fallback for when focus moves elsewhere.
     Qt.callLater(function() { searchField.forceActiveFocus() })
+  } else {
+    // Panel closed: drop decrypted detail material from memory.
+    pass.clearDetail()
   }
 
   Connections {
@@ -321,6 +324,8 @@ Panel {
               spacing: Style.space(2)
 
               Text {
+
+                  textFormat: Text.PlainText
                 width: parent.width
                 text: root.breadcrumb()
                 color: root.foreground
@@ -331,6 +336,8 @@ Panel {
               }
 
               Text {
+
+                  textFormat: Text.PlainText
                 visible: root.view === "vaults"
                 width: parent.width
                 text: pass.account !== "" ? pass.account : root.statusLabel()
@@ -349,6 +356,8 @@ Panel {
             spacing: Style.space(8)
 
             Text {
+
+                textFormat: Text.PlainText
               text: root.statusLabel()
               color: pass.status === "unlocked" ? root.foreground : root.dim
               font.family: root.fontFamily
@@ -454,6 +463,8 @@ Panel {
           }
 
           Text {
+
+              textFormat: Text.PlainText
             visible: root.view === "vaults" && pass.vaults.length === 0 && !pass.itemsLoading
             width: parent.width
             text: pass.status === "unlocked"
@@ -467,6 +478,8 @@ Panel {
           }
 
           Text {
+
+              textFormat: Text.PlainText
             visible: root.view === "vaults" && pass.itemsLoading
             width: parent.width
             text: tr("vault.loading")
@@ -494,6 +507,8 @@ Panel {
           }
 
           Text {
+
+              textFormat: Text.PlainText
             visible: root.view === "items" && root.visibleItems.length === 0 && !pass.itemsLoading
             width: parent.width
             topPadding: Style.space(8)
@@ -536,6 +551,8 @@ Panel {
     }
 
     Text {
+
+        textFormat: Text.PlainText
       id: vicon
       text: vrow.row && vrow.row.name === "" ? "\uF0C9" : "\uF114"   // list / folder
       color: root.dim
@@ -547,6 +564,8 @@ Panel {
     }
 
     Text {
+
+        textFormat: Text.PlainText
       id: vname
       text: vrow.row ? vrow.row.label : ""
       color: root.foreground
@@ -561,6 +580,8 @@ Panel {
     }
 
     Text {
+
+        textFormat: Text.PlainText
       id: vcount
       text: vrow.row ? String(vrow.row.count) : ""
       color: root.dim
@@ -597,6 +618,8 @@ Panel {
     }
 
     Text {
+
+        textFormat: Text.PlainText
       id: typeIconText
       text: root.typeIcon(row.item ? row.item.itemType : "")
       color: root.dim
@@ -617,6 +640,8 @@ Panel {
       spacing: Style.space(2)
 
       Text {
+
+          textFormat: Text.PlainText
         id: titleText
         width: parent.width
         text: row.item ? row.item.title : ""
@@ -627,6 +652,8 @@ Panel {
       }
 
       Text {
+
+          textFormat: Text.PlainText
         id: userText
         visible: text !== ""
         width: parent.width
@@ -701,6 +728,8 @@ Panel {
     spacing: Style.space(6)
 
     Text {
+
+        textFormat: Text.PlainText
       visible: pass.detailError !== ""
       width: parent.width
       text: pass.detailError
@@ -711,6 +740,8 @@ Panel {
     }
 
     Text {
+
+        textFormat: Text.PlainText
       visible: pass.detailLoading
       width: parent.width
       text: tr("detail.decrypting")
@@ -720,6 +751,8 @@ Panel {
     }
 
     Text {
+
+        textFormat: Text.PlainText
       visible: !!root.currentItem && root.currentItem.itemType !== ""
       width: parent.width
       text: !!root.currentItem ? root.typeLabel(root.currentItem.itemType) : ""
@@ -741,6 +774,8 @@ Panel {
     }
 
     Text {
+
+        textFormat: Text.PlainText
       visible: !pass.detailLoading && pass.detailFields.length === 0 && pass.detailError === ""
       width: parent.width
       text: tr("detail.noFields")
@@ -777,6 +812,8 @@ Panel {
       spacing: Style.space(2)
 
       Text {
+
+          textFormat: Text.PlainText
         width: parent.width
         text: frow.field ? frow.field.label : ""
         color: root.dim
@@ -787,6 +824,8 @@ Panel {
       }
 
       Text {
+
+          textFormat: Text.PlainText
         width: parent.width
         text: {
           if (!frow.field) return ""
@@ -802,6 +841,8 @@ Panel {
       }
 
       Text {
+
+          textFormat: Text.PlainText
         visible: !!frow.field && frow.field.multiline && !frow.field.hidden
         width: parent.width
         text: frow.field ? String(frow.field.value || "") : ""
