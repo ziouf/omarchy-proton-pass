@@ -34,8 +34,10 @@ desktop lock.
 - **Global picker (`pass-pick`)** — a fuzzy-search menu summonable from
   anywhere (keybinding, Omarchy menu, CLI): every result is labelled with its
   item type (Login, Alias, Secure note, Credit card, Identity, SSH key,
-  Wi-Fi); pick an item, then the field to copy, autotype it into the focused
-  window, or jump to the panel detail.
+  Wi-Fi); pick an item and the action menu **adapts to the fields that item
+  actually carries** (username or email, password, TOTP, URL, autotype,
+  custom fields — hidden ones included), plus a shortcut into the panel
+  detail.
 - **Metadata cache** — a systemd timer refreshes `~/.cache/ziouf.proton-pass/
   items.json` (ids, titles, vaults — never secrets, mode 0600) so the picker
   and the panel open instantly.

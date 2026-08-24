@@ -548,15 +548,40 @@ Item {
   Process {
     id: bufferCopyProcess
     running: false
+    // Single-slot runner: a request arriving while a copy is in flight is
+    // queued and replayed on exit instead of being silently dropped.
+    onExited: {
+      if (root.pendingBufferCopy) {
+        var queued = root.pendingBufferCopy
+        root.pendingBufferCopy = null
+        root.startBufferCopy(queued)
+      }
+    }
   }
+
+  property var pendingBufferCopy: null
 
   function copyValue(label, value, hidden, timeoutSec) {
     if (!Quickshell.env("XDG_RUNTIME_DIR")) return
-    bufferFile.setText(String(value))
+    var request = {
+      label: truncate(label, 128),
+      value: String(value === undefined || value === null ? "" : value),
+      hidden: hidden === true,
+      timeout: Math.max(0, Number(timeoutSec) || 0)
+    }
+    if (bufferCopyProcess.running) {
+      pendingBufferCopy = request
+      return
+    }
+    startBufferCopy(request)
+  }
+
+  function startBufferCopy(request) {
+    bufferFile.setText(request.value)
     Qt.callLater(function() {
       var cmd = [scriptDir + "/copy-value", bufferPath,
-                 truncate(label, 128), hidden ? "secret" : "value",
-                 String(timeoutSec)]
+                 request.label, request.hidden ? "secret" : "value",
+                 String(request.timeout)]
       if (root.genericNotifications) cmd = ["env", "PASS_GENERIC_NOTIFY=1"].concat(cmd)
       bufferCopyProcess.command = root.timed(root.actionDeadlineSec, cmd)
       bufferCopyProcess.running = true

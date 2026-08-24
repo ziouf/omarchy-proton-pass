@@ -1,14 +1,17 @@
 #!/bin/bash
 # pass-pick — global Proton Pass picker: fuzzy-search every vault item from
-# anywhere, choose the field, copy it (or launch autotype / open the panel
-# detail). Backed by the local metadata cache (see pass-cache-update), so it
-# opens instantly.
+# anywhere, then choose an action adapted to the fields the selected item
+# actually carries (username/email, password, TOTP, URL, autotype, extra
+# fields, panel detail). Backed by the local metadata cache
+# (pass-cache-update), so the item list opens instantly; the chosen item is
+# fetched once to build the action menu.
 #
 # Usage: pass-pick
 # Dev/test affordances:
 #   PASS_PICK_LABEL="<label>"   skip the item picker, act on this label
-#   PASS_PICK_FIELD="<action>"  skip the field picker (copy-username,
-#                               copy-password, copy-totp, autotype, detail)
+#   PASS_PICK_FIELD="<label>"   skip the action picker, run this action
+#
+# Dependencies: pass-cli, jq, omarchy-shell, wl-copy, notify-send.
 
 set -uo pipefail
 
@@ -17,6 +20,14 @@ CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ziouf.proton-pass"
 CACHE="$CACHE_DIR/items.json"
 STALE_SEC=900
 
+# --- dependencies ---------------------------------------------------------
+for dep in pass-cli jq omarchy-shell wl-copy notify-send; do
+  command -v "$dep" >/dev/null 2>&1 || {
+    echo "pass-pick: missing dependency: $dep" >&2
+    exit 1
+  }
+done
+
 # --- i18n -----------------------------------------------------------------
 raw_lang="${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
 lang="$(echo "${raw_lang%%.*}" | cut -d_ -f1 | tr '[:upper:]' '[:lower:]')"
@@ -24,10 +35,12 @@ case "$lang" in fr|zh) ;; *) lang="en" ;; esac
 
 if [[ "$lang" == "fr" ]]; then
   prompt_items="Proton Pass — rechercher"
-  prompt_field="Copier quoi ?"
+  prompt_field="Quelle action ?"
   a_username="Copier l'identifiant"
   a_password="Copier le mot de passe"
   a_totp="Copier le code TOTP"
+  a_url="Copier l'URL"
+  a_open="Ouvrir l'URL"
   a_autotype="Autotype (identifiant ⇥ mot de passe)"
   a_detail="Ouvrir le détail dans le panneau"
   lbl_login="Connexion"; lbl_alias="Alias"; lbl_note="Note sécurisée"
@@ -37,12 +50,17 @@ if [[ "$lang" == "fr" ]]; then
   msg_cache_fail_body="Lancement du rafraîchissement… réessaie dans un instant."
   msg_stale="Cache Proton Pass périmé"
   msg_stale_body="Rafraîchissement en arrière-plan."
+  msg_shell_down="Omarchy shell injoignable"
+  msg_shell_down_body="Le sélecteur a besoin du shell (omarchy-shell)."
+  msg_item_fail="Échec de lecture de l'élément"
 elif [[ "$lang" == "zh" ]]; then
   prompt_items="Proton Pass — 搜索"
-  prompt_field="复制什么？"
+  prompt_field="选择操作"
   a_username="复制用户名"
   a_password="复制密码"
   a_totp="复制 TOTP 验证码"
+  a_url="复制 URL"
+  a_open="打开 URL"
   a_autotype="自动输入（用户名 ⇥ 密码）"
   a_detail="在面板中打开详情"
   lbl_login="登录"; lbl_alias="别名"; lbl_note="安全笔记"
@@ -52,12 +70,17 @@ elif [[ "$lang" == "zh" ]]; then
   msg_cache_fail_body="正在刷新…请稍后重试。"
   msg_stale="Proton Pass 缓存已过期"
   msg_stale_body="正在后台刷新。"
+  msg_shell_down="Omarchy shell 不可用"
+  msg_shell_down_body="选择器需要 shell（omarchy-shell）。"
+  msg_item_fail="读取项目失败"
 else
   prompt_items="Proton Pass — search"
-  prompt_field="Copy what?"
+  prompt_field="Which action?"
   a_username="Copy username"
   a_password="Copy password"
   a_totp="Copy TOTP code"
+  a_url="Copy URL"
+  a_open="Open URL"
   a_autotype="Autotype (username ⇥ password)"
   a_detail="Open details in the panel"
   lbl_login="Login"; lbl_alias="Alias"; lbl_note="Secure note"
@@ -67,25 +90,66 @@ else
   msg_cache_fail_body="Refreshing now… try again in a moment."
   msg_stale="Proton Pass cache is stale"
   msg_stale_body="Refreshing in the background."
+  msg_shell_down="Omarchy shell unreachable"
+  msg_shell_down_body="The picker needs the shell (omarchy-shell)."
+  msg_item_fail="Failed to read the item"
 fi
+
+fmt() { # fmt <template> <arg1> [arg2]
+  local out="$1"; shift
+  local i=1
+  while (( $# > 0 )); do
+    out="${out//%$i/$1}"
+    shift; ((i++))
+  done
+  printf '%s' "$out"
+}
+
+shell_alive() { omarchy-shell shell ping >/dev/null 2>&1; }
+
+summon_select() { # summon_select <prompt> <options-json> <sel-file> <done-file>
+  shell_alive || {
+    notify-send -a "Proton Pass" -u critical "$msg_shell_down" "$msg_shell_down_body" 2>/dev/null || true
+    return 1
+  }
+  local payload
+  payload="$(jq -n --arg prompt "$1" --argjson options "$2" \
+                    --arg sel "$3" --arg done "$4" \
+              '{mode: "select", prompt: $prompt, filterable: true,
+                width: 600, maxHeight: 600,
+                options: $options, selectionFile: $sel, doneFile: $done}')"
+  omarchy-shell shell summon omarchy.menu "$payload"
+}
+
+wait_selection() { # wait_selection <sel-file> <done-file> -> echoes choice
+  local sel="$1" done_f="$2" i
+  for i in $(seq 1 600); do
+    [[ -s "$done_f" || -s "$sel" ]] && break
+    sleep 0.5
+  done
+  cat "$sel" 2>/dev/null || true
+}
 
 # --- cache ----------------------------------------------------------------
 if [[ ! -f "$CACHE" ]]; then
   notify-send -a "Proton Pass" "$msg_cache_fail" "$msg_cache_fail_body" 2>/dev/null || true
-  "$SCRIPT_DIR/pass-cache-update" >/dev/null 2>&1 || exit 1
+  timeout 120 "$SCRIPT_DIR/pass-cache-update" >/dev/null 2>&1 || exit 1
 fi
 
 now_s="$(date +%s)"
 updated_s="$(jq -r '.updatedAtMs // 0' "$CACHE" 2>/dev/null | cut -c1-10)"
 if [[ -n "$updated_s" && $((now_s - updated_s)) -gt $STALE_SEC ]]; then
   notify-send -a "Proton Pass" -t 2000 "$msg_stale" "$msg_stale_body" 2>/dev/null || true
-  setsid "$SCRIPT_DIR/pass-cache-update" >/dev/null 2>&1 <&- &
+  setsid timeout 120 "$SCRIPT_DIR/pass-cache-update" >/dev/null 2>&1 <&- &
 fi
 
 # --- item picker ----------------------------------------------------------
 # labels.tsv: "<display label>\t<shareId>|<itemId>" (duplicates get " · N").
 labels_tsv="$(mktemp)"
-trap 'rm -f "$labels_tsv" "$sel_file" "$done_file"' EXIT
+sel_file="$(mktemp)"
+done_file="$(mktemp)"
+field_map="$(mktemp)"
+trap 'rm -f "$labels_tsv" "$sel_file" "$done_file" "$field_map"' EXIT
 
 jq -r \
   --arg l_login "$lbl_login" --arg l_alias "$lbl_alias" --arg l_note "$lbl_note" \
@@ -116,59 +180,134 @@ choice=""
 if [[ -n "${PASS_PICK_LABEL:-}" ]]; then
   choice="$PASS_PICK_LABEL"
 else
-  sel_file="$(mktemp)"
-  done_file="$(mktemp)"
   labels_json="$(cut -f1 "$labels_tsv" | jq -R . | jq -s .)"
-  payload="$(jq -n --arg prompt "$prompt_items" --argjson options "$labels_json" \
-                    --arg sel "$sel_file" --arg done "$done_file" \
-              '{mode: "select", prompt: $prompt, filterable: true,
-                width: 600, maxHeight: 600,
-                options: $options, selectionFile: $sel, doneFile: $done}')"
-  omarchy-shell shell summon omarchy.menu "$payload"
-
-  for _ in $(seq 1 600); do
-    [[ -s "$done_file" || -s "$sel_file" ]] && break
-    sleep 0.5
-  done
-  choice="$(cat "$sel_file" 2>/dev/null || true)"
+  summon_select "$prompt_items" "$labels_json" "$sel_file" "$done_file" || exit 1
+  choice="$(wait_selection "$sel_file" "$done_file")"
   [[ -z "$choice" ]] && exit 0    # cancelled
 fi
 
 ref="$(awk -F'\t' -v c="$choice" '$1 == c { print $2; exit }' "$labels_tsv")"
 if [[ -z "$ref" ]]; then
   # Fallback for a stale cache hit: refresh in the background and give up.
-  setsid "$SCRIPT_DIR/pass-cache-update" >/dev/null 2>&1 <&- &
+  setsid timeout 120 "$SCRIPT_DIR/pass-cache-update" >/dev/null 2>&1 <&- &
   exit 0
 fi
 share_id="${ref%%|*}"
 item_id="${ref#*|}"
 
-# --- field picker ---------------------------------------------------------
+# --- fetch the item: the action menu adapts to its real fields ------------
+item_json="$(timeout 25 pass-cli item view --output json "pass://$share_id/$item_id" 2>/dev/null)" || {
+  notify-send -a "Proton Pass" -u critical "$msg_item_fail" 2>/dev/null || true
+  exit 1
+}
+
+# field_map: "<action label>\t<action>" — only fields that actually exist.
+# The typed payload (Login, Note, SshKey, …) is the first object entry of
+# item.content.content; extras are appended as copy actions (hidden ones
+# included, copy-only); "open the detail" is always available.
+jq -r \
+  --arg l_username "$a_username" --arg l_password "$a_password" \
+  --arg l_totp "$a_totp" --arg l_url "$a_url" --arg l_open "$a_open" \
+  --arg l_autotype "$a_autotype" '
+  (.item.content.content | to_entries
+     | map(select(.value != null and (.value | type == "object")))) as $types
+  | (if ($types | length) > 0 then $types[0].value else {} end) as $f
+  | ($types[0].key // "") as $typeKey
+  | (($f.username // "") != "") as $hasU
+  | (($f.email // "") != "") as $hasE
+  | (if $hasU then "username" elif $hasE then "email" else "" end) as $uidField
+  | (if $uidField != "" then $f[$uidField] else "" end) as $uid
+  | (if $uid != "" then [$l_username, "copy:" + $uidField] else empty end),
+    (if (($f.password // "") != "") then [$l_password, "copy:password"] else empty end),
+    (if (($f.totp_uri // "") != "") then [$l_totp, "copy:totp"] else empty end),
+    (if (($f.urls // []) | length > 0) then [$l_url, "copy:url"], [$l_open, "open:url"] else empty end),
+    (if ($typeKey == "Login" and $uid != "" and (($f.password // "") != ""))
+       then [$l_autotype, "autotype"] else empty end)
+  | @tsv' <<<"$item_json" > "$field_map"
+
+# Extra fields: one copy action each (hidden ones included, copy-only).
+jq -r '
+  (.item.content.extra_fields // [])[]
+  | ((.content // .value // "")
+     | if type == "object" then (.Text // tostring) else . end) as $v
+  | select(($v // "") != "")
+  | [ ((if ((.type // "") == "hidden") then "• " else "" end) + (.label // .name // "field")),
+      "extra:" + (.label // .name // "field") ]
+  | @tsv' <<<"$item_json" >> "$field_map"
+
+printf '%s\t%s\n' "$a_detail" "detail" >> "$field_map"
+
+# --- action picker --------------------------------------------------------
 action="${PASS_PICK_FIELD:-}"
 if [[ -z "$action" ]]; then
-  sel_file="$(mktemp)"
-  done_file="$(mktemp)"
-  fields_json="$(printf '%s\n' "$a_username" "$a_password" "$a_totp" "$a_autotype" "$a_detail" | jq -R . | jq -s .)"
-  payload="$(jq -n --arg prompt "$prompt_field" --argjson options "$fields_json" \
-                    --arg sel "$sel_file" --arg done "$done_file" \
-              '{mode: "select", prompt: $prompt, filterable: true,
-                width: 380,
-                options: $options, selectionFile: $sel, doneFile: $done}')"
-  omarchy-shell shell summon omarchy.menu "$payload"
-
-  for _ in $(seq 1 600); do
-    [[ -s "$done_file" || -s "$sel_file" ]] && break
-    sleep 0.5
-  done
-  action="$(cat "$sel_file" 2>/dev/null || true)"
+  fields_json="$(cut -f1 "$field_map" | jq -R . | jq -s .)"
+  summon_select "$prompt_field" "$fields_json" "$sel_file" "$done_file" || exit 1
+  action="$(wait_selection "$sel_file" "$done_file")"
   [[ -z "$action" ]] && exit 0    # cancelled
 fi
 
-case "$action" in
-  "$a_username")  exec "$SCRIPT_DIR/copy-secret" "$share_id" "$item_id" "username" 30 ;;
-  "$a_password")  exec "$SCRIPT_DIR/copy-secret" "$share_id" "$item_id" "password" 30 ;;
-  "$a_totp")      exec "$SCRIPT_DIR/copy-secret" "$share_id" "$item_id" "totp" 30 ;;
-  "$a_autotype")  exec "$SCRIPT_DIR/pass-autotype" "$share_id" "$item_id" ;;
-  "$a_detail")    exec omarchy-shell ziouf.proton-pass openItem "$item_id" ;;
-  *) exit 0 ;;
+dispatch="$(awk -F'\t' -v c="$action" '$1 == c { print $2; exit }' "$field_map")"
+[[ -z "$dispatch" ]] && exit 0
+
+# --- dispatch -------------------------------------------------------------
+item_title="$(jq -r '.item.content.title // ""' <<<"$item_json")"
+
+buffered_copy() { # buffered_copy <value> <label> <kind>
+  local buf
+  buf="$(mktemp "${XDG_RUNTIME_DIR:-/tmp}/ziouf.proton-pass.XXXXXX")"
+  chmod 600 "$buf"
+  printf '%s' "$1" > "$buf"
+  "$SCRIPT_DIR/copy-value" "$buf" "$2" "$3" 30
+  exit 0
+}
+
+field_value() { # field_value <standard field name>
+  jq -r --arg fname "$1" '
+    (.item.content.content | to_entries
+       | map(select(.value != null and (.value | type == "object")))[0].value
+       // {}) as $fields
+    | if $fname == "username" and (($fields.username // "") == "")
+      then ($fields.email // "")
+      else ($fields[$fname] // "")
+      end
+    | if type == "array" then (.[0] // "") else . end' <<<"$item_json"
+}
+
+case "$dispatch" in
+  copy:username|copy:email|copy:password)
+    field="${dispatch#copy:}"
+    kind="value"
+    [[ "$field" == "password" ]] && kind="secret"
+    buffered_copy "$(field_value "$field")" "$item_title" "$kind"
+    ;;
+  copy:totp)
+    # The URI form resolves the current code; "totp" is not a raw JSON key.
+    exec "$SCRIPT_DIR/copy-secret" "$share_id" "$item_id" "totp" 30
+    ;;
+  copy:url)
+    buffered_copy "$(field_value "urls")" "$item_title" "value"
+    ;;
+  open:url)
+    url="$(field_value "urls")"
+    [[ -n "$url" ]] && exec xdg-open "$url"
+    exit 0
+    ;;
+  extra:*)
+    label="${dispatch#extra:}"
+    value="$(jq -r --arg l "$label" '
+      (.item.content.extra_fields // [])[]
+      | select(((.label // .name // "") == $l))
+      | ((.content // .value // "")
+         | if type == "object" then (.Text // tostring) else . end)' <<<"$item_json")"
+    buffered_copy "$value" "$label" "secret"
+    ;;
+  autotype)
+    exec "$SCRIPT_DIR/pass-autotype" "$share_id" "$item_id"
+    ;;
+  detail)
+    exec omarchy-shell ziouf.proton-pass openItem "$item_id"
+    ;;
+  *)
+    exit 0
+    ;;
 esac

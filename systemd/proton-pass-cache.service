@@ -2,5 +2,6 @@
 Description=Refresh the Proton Pass metadata cache (ziouf.proton-pass)
 
 [Service]
+TimeoutStartSec=120
 Type=oneshot
 ExecStart=%h/.config/omarchy/plugins/ziouf.proton-pass/scripts/pass-cache-update
