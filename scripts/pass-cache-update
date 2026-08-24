@@ -34,9 +34,10 @@ done < <(jq -r '.vaults[].name' <<<"$vaults_json") | jq -s '.' > "$tmp.items"
 
 jq -n \
   --arg now "$(date -Iseconds)" \
+  --argjson epoch "$(date +%s)" \
   --argjson vaults "$(jq -c '[.vaults[].name]' <<<"$vaults_json")" \
   --argjson items "$(cat "$tmp.items")" \
-  '{schemaVersion: 1, updatedAt: $now, vaults: $vaults, items: $items}' > "$tmp"
+  '{schemaVersion: 1, updatedAt: $now, updatedAtEpoch: $epoch, vaults: $vaults, items: $items}' > "$tmp"
 rm -f "$tmp.items"
 
 mv "$tmp" "$CACHE_DIR/items.json"

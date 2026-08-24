@@ -8,7 +8,7 @@
 
 set -u
 
-POLL_INTERVAL="${PASS_GUARD_POLL_INTERVAL:-3}"
+POLL_INTERVAL="${PASS_GUARD_POLL_INTERVAL:-5}"
 
 last_state=""
 while true; do

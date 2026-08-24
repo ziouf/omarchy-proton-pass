@@ -148,7 +148,7 @@ if [[ ! -f "$CACHE" ]]; then
 fi
 
 now_s="$(date +%s)"
-updated_s="$(jq -r '.updatedAtMs // 0' "$CACHE" 2>/dev/null | cut -c1-10)"
+updated_s="$(jq -r '.updatedAtEpoch // (.updatedAt | fromdateiso8601 // 0) // 0' "$CACHE" 2>/dev/null)"
 if [[ -n "$updated_s" && $((now_s - updated_s)) -gt $STALE_SEC ]]; then
   notify-send -a "Proton Pass" -t 2000 "$msg_stale" "$msg_stale_body" 2>/dev/null || true
   setsid timeout 120 "$SCRIPT_DIR/pass-cache-update" >/dev/null 2>&1 <&- &

@@ -87,7 +87,15 @@ Panel {
     return out
   }
 
-  readonly property var visibleItems: filteredItems()
+  readonly property int maxRenderedItems: 120
+  readonly property var filteredAll: filteredItems()
+  // Rendering cap: the Repeater instantiates every delegate eagerly, so a
+  // 365-item vault would build ~8 000 objects per view entry. Show the first
+  // N sorted matches and tell the user to narrow the search beyond that.
+  readonly property var visibleItems: filteredAll.length > maxRenderedItems
+                                      ? filteredAll.slice(0, maxRenderedItems)
+                                      : filteredAll
+  readonly property int hiddenItemCount: filteredAll.length - visibleItems.length
 
   function clampIndex() {
     var model = view === "vaults" ? vaultRows : visibleItems
@@ -175,9 +183,9 @@ Panel {
     pass.copyField(item, field)
   }
 
-  function refreshNow() {
+  function refreshNow(force) {
     pass.probeSession()
-    if (pass.status === "unlocked") pass.refreshItems()
+    if (pass.status === "unlocked") pass.refreshItems(force === true)
   }
 
   function statusIcon() {
@@ -219,7 +227,7 @@ Panel {
     query = ""
     selectedIndex = 0
     cursorActive = false
-    refreshNow()
+    refreshNow(false)
     // Typing goes straight to the filter; the key catcher stays as a
     // fallback for when focus moves elsewhere.
     Qt.callLater(function() { searchField.forceActiveFocus() })
@@ -261,7 +269,7 @@ Panel {
     function toggle(): void { root.toggle() }
     function show(): void { root.open() }
     function hide(): void { root.close() }
-    function refresh(): string { root.refreshNow(); return "ok" }
+    function refresh(): string { root.refreshNow(true); return "ok" }
     function lock(): string { pass.lockSession(); return "ok" }
     function login(): string { pass.login(); return "ok" }
     function unlock(): string { pass.unlock(); return "ok" }
@@ -423,7 +431,7 @@ Panel {
                 fontSize: Style.font.caption
                 onClicked: {
                   if (pass.status === "logged-out") pass.login()
-                  else root.refreshNow()
+                  else root.refreshNow(true)
                 }
               }
             }
@@ -537,6 +545,18 @@ Panel {
             text: pass.items.length === 0
                   ? tr("items.noneAtAll")
                   : tr("items.noneHere")
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            horizontalAlignment: Text.AlignHCenter
+          }
+
+          Text {
+            visible: root.view === "items" && root.hiddenItemCount > 0
+            width: parent.width
+            topPadding: Style.space(4)
+            text: trFmt("items.hiddenCount", pass.items.length - root.visibleItems.length,
+                        pass.items.length)
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption

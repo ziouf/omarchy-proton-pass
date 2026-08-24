@@ -202,6 +202,8 @@ Item {
   property var itemAccumulator: []
   property string walkKind: ""          // "vaults" | "items"
   property string currentWalkVault: ""
+  property double lastWalkAtMs: 0       // drives the open-time throttle
+  readonly property int walkThrottleSec: 300
 
   property string processCapture: ""
   property string processErrCapture: ""
@@ -226,8 +228,14 @@ Item {
     onExited: function(exitCode) { root.walkExited(exitCode) }
   }
 
-  function refreshItems() {
+  function refreshItems(force) {
     if (walkProcess.running) return
+    // Auto refreshes (panel open) skip the walk while the data is fresh;
+    // explicit refreshes (button, IPC) always walk.
+    if (force !== true && root.lastWalkAtMs > 0) {
+      var ageSec = (Date.now() - root.lastWalkAtMs) / 1000
+      if (ageSec < root.walkThrottleSec) return
+    }
     root.itemsLoading = true
     root.itemAccumulator = []
     root.processCapture = ""
@@ -367,6 +375,7 @@ Item {
     root.items = result
     root.dataRevision++
     root.itemsLoading = false
+    root.lastWalkAtMs = Date.now()
     writeCache()
   }
 
@@ -711,6 +720,8 @@ Item {
       return
     }
     if (!parsed || !Array.isArray(parsed.items)) return
+    var epoch = Number(parsed.updatedAtEpoch)
+    if (epoch > 0) root.lastWalkAtMs = epoch * 1000
 
     var result = []
     for (var i = 0; i < parsed.items.length && result.length < root.maxItems; i++) {
@@ -735,6 +746,7 @@ Item {
     var payload = {
       schemaVersion: 1,
       updatedAt: new Date().toISOString(),
+      updatedAtEpoch: Math.floor(Date.now() / 1000),
       vaults: root.vaults,
       items: root.items
     }

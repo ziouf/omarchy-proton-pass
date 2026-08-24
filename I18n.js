@@ -6,6 +6,7 @@
 
 var catalogs = {
   en: {
+    "items.hiddenCount": "%1 of %2 items shown — narrow the search",
     "error.detailTimeout": "The request timed out — try again.",
     "search.reset": "Reset search",
     // Session states
@@ -98,6 +99,7 @@ var catalogs = {
   },
 
   zh: {
+    "items.hiddenCount": "显示 %1/%2 个项目 — 请缩小搜索范围",
     "error.detailTimeout": "请求超时 — 请重试。",
     "search.reset": "重置搜索",
     // Session states
@@ -190,6 +192,7 @@ var catalogs = {
   },
 
   fr: {
+    "items.hiddenCount": "%1 éléments affichés sur %2 — affinez la recherche",
     "error.detailTimeout": "Délai dépassé — réessaie.",
     "search.reset": "Réinitialiser la recherche",
     "status.unlocked": "Session déverrouillée",
