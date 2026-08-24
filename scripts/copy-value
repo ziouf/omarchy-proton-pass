@@ -7,7 +7,8 @@
 # (tmpfs, 0600), is shredded right after the copy, and the clipboard is
 # cleared after the optional delay if our value is still what sits there
 # (SHA-256 comparison). Notification wording follows LC_ALL / LC_MESSAGES /
-# LANG (fr, zh, else en).
+# LANG (fr, zh, else en). Set PASS_GENERIC_NOTIFY=1 to keep item titles out
+# of notifications.
 
 set -euo pipefail
 
@@ -20,22 +21,26 @@ clear_after="${4:-30}"
 raw_lang="${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
 lang="$(echo "${raw_lang%%.*}" | cut -d_ -f1 | tr '[:upper:]' '[:lower:]')"
 case "$lang" in fr|zh) ;; *) lang="en" ;; esac
+generic="${PASS_GENERIC_NOTIFY:-0}"
 
 if [[ "$lang" == "fr" ]]; then
   msg_copied="Copié"
   kind_secret="secret"
   kind_value="valeur"
   msg_of_item='%1 « %2 » (%3 s)'
+  msg_generic='%1 copié (%2 s)'
 elif [[ "$lang" == "zh" ]]; then
   msg_copied="已复制"
   kind_secret="机密"
   kind_value="值"
   msg_of_item='%2 的 %1（%3 秒）'
+  msg_generic='%1 已复制（%2 秒）'
 else
   msg_copied="Copied"
   kind_secret="secret"
   kind_value="value"
   msg_of_item='%1 "%2" (%3 s)'
+  msg_generic='%1 copied (%2 s)'
 fi
 
 case "$kind" in
@@ -70,5 +75,10 @@ if [[ "$clear_after" =~ ^[0-9]+$ ]] && (( clear_after > 0 )); then
   disown
 fi
 
-notify-send -a "Proton Pass" -t 2000 "$msg_copied" \
-  "$(fmt "$msg_of_item" "$display_kind" "$label" "$clear_after")" 2>/dev/null || true
+if [[ "$generic" == "1" ]]; then
+  notify-send -a "Proton Pass" -t 2000 "$msg_copied" \
+    "$(fmt "$msg_generic" "$display_kind" "$clear_after")" 2>/dev/null || true
+else
+  notify-send -a "Proton Pass" -t 2000 "$msg_copied" \
+    "$(fmt "$msg_of_item" "$display_kind" "$label" "$clear_after")" 2>/dev/null || true
+fi

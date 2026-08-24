@@ -215,6 +215,7 @@ omarchy-shell ziouf.proton-pass openItem <itemId>   # open the panel on an item'
 | `refreshIntervalSec`  | 60      | Session status polling interval                |
 | `clipboardTimeoutSec` | 30      | Seconds before the clipboard is cleared (0=never) |
 | `showTotp`            | true    | Offer the TOTP copy action on login items      |
+| `genericNotifications` | false  | Keep item titles out of copy/autotype notifications |
 
 ## Security notes
 
@@ -226,7 +227,11 @@ omarchy-shell ziouf.proton-pass openItem <itemId>   # open the panel on an item'
   `pass-cli session lock`; it requires a lock code created beforehand with
   `pass-cli session create-lock`.
 - Autotype types into whatever window has focus after a 3-second heads-up;
-  it never presses Enter. Point it at a trusted window.
+  it never presses Enter and feeds secrets to wtype over stdin (never
+  process arguments, so they stay out of /proc/*/cmdline). Point it at a
+  trusted window.
+- Probe failures are logged with account identifiers redacted (email,
+  session id).
 - Copies are byte-exact (multiline values and special characters survive);
   the TOTP quick action disappears once pass-cli confirms an item carries
   no TOTP code.

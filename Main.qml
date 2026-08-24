@@ -45,7 +45,7 @@ Item {
   readonly property int maxItems: 2000
   readonly property int maxVaults: 64
   readonly property int maxDetailFields: 64
-  readonly property int maxValueChars: 4096
+  readonly property int maxValueChars: 65536
   readonly property int probeDeadlineSec: 15
   readonly property int walkLegDeadlineSec: 45
   readonly property int detailDeadlineSec: 25
@@ -62,6 +62,16 @@ Item {
     return s.length > maxChars ? s.substring(0, maxChars) : s
   }
 
+  // Never journal account identifiers: probe output carries the account
+  // email and the session id.
+  function redact(text) {
+    var s = String(text === undefined || text === null ? "" : text)
+    s = s.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[email]")
+    s = s.replace(/(ID\s*:)\s*\S+/, "$1 [redacted]")
+    s = s.replace(/(Username\s*:)\s*\S+/, "$1 [redacted]")
+    return s
+  }
+
   // ------------------------------------------------------------- settings
 
   function setting(name, fallback) {
@@ -72,6 +82,7 @@ Item {
   readonly property int refreshIntervalSec: Math.max(15, Number(setting("refreshIntervalSec", 60)))
   readonly property int clipboardTimeoutSec: Number(setting("clipboardTimeoutSec", 30))
   readonly property bool showTotp: setting("showTotp", true) !== false
+  readonly property bool genericNotifications: setting("genericNotifications", false) === true
 
   // System locale drives the UI language (LC_ALL > LC_MESSAGES > LANG >
   // Qt locale); English doubles as the fallback catalog.
@@ -162,8 +173,8 @@ Item {
 
     if (exitCode !== 0) {
       console.log("ziouf.proton-pass/probe exit=" + exitCode +
-                  " out=" + JSON.stringify(out.slice(0, 200)) +
-                  " err=" + JSON.stringify(err.slice(0, 200)))
+                  " out=" + JSON.stringify(redact(out).slice(0, 120)) +
+                  " err=" + JSON.stringify(redact(err).slice(0, 120)))
       if (combined.indexOf("lock") >= 0 && combined.indexOf("unlock") < 0) {
         root.status = "locked"
       } else if (combined.indexOf("log in") >= 0) {
@@ -335,7 +346,6 @@ Item {
         vault: truncate(currentVault, 128),
         title: title,
         itemType: truncate(raw.item_type || raw.type, 32),
-        username: "",
         hasTotp: undefined
       })
     }
@@ -485,10 +495,12 @@ Item {
           rows.push({ label: tr("field.totp"), field: "totp", value: tr("totp.currentHint"),
                       hidden: false, multiline: false })
         } else {
-          var text = truncate(v, maxValueChars)
+          var rawText = String(v)
+          var text = truncate(rawText, maxValueChars)
           var hiddenKey = /password|secret|cvv|private|pin/i.test(f)
           rows.push({ label: prettifyKey(f), field: truncate(f, 128), value: text,
-                      hidden: hiddenKey, multiline: !hiddenKey && text.length > 48 })
+                      hidden: hiddenKey, multiline: !hiddenKey && text.length > 48,
+                      truncated: rawText.length > maxValueChars })
         }
       }
     }
@@ -504,7 +516,8 @@ Item {
       value = truncate(value, maxValueChars)
       var hiddenField = String(extra.type || "").toLowerCase() === "hidden"
       rows.push({ label: label, field: label, value: value,
-                  hidden: hiddenField, multiline: !hiddenField && value.length > 48 })
+                  hidden: hiddenField, multiline: !hiddenField && value.length > 48,
+                  truncated: value.length >= maxValueChars })
     }
 
     root.detailFields = rows
@@ -541,10 +554,11 @@ Item {
     if (!Quickshell.env("XDG_RUNTIME_DIR")) return
     bufferFile.setText(String(value))
     Qt.callLater(function() {
-      bufferCopyProcess.command = root.timed(root.actionDeadlineSec,
-                                             [scriptDir + "/copy-value", bufferPath,
-                                              truncate(label, 128), hidden ? "secret" : "value",
-                                              String(timeoutSec)])
+      var cmd = [scriptDir + "/copy-value", bufferPath,
+                 truncate(label, 128), hidden ? "secret" : "value",
+                 String(timeoutSec)]
+      if (root.genericNotifications) cmd = ["env", "PASS_GENERIC_NOTIFY=1"].concat(cmd)
+      bufferCopyProcess.command = root.timed(root.actionDeadlineSec, cmd)
       bufferCopyProcess.running = true
     })
   }
@@ -609,7 +623,9 @@ Item {
   function runAction(command, label) {
     if (actionProcess.running) return
     root.actionProcessLabel = label
-    actionProcess.command = root.timed(root.actionDeadlineSec, command)
+    var cmd = root.timed(root.actionDeadlineSec, command)
+    if (root.genericNotifications) cmd = ["env", "PASS_GENERIC_NOTIFY=1"].concat(cmd)
+    actionProcess.command = cmd
     actionProcess.running = true
   }
 
@@ -682,7 +698,6 @@ Item {
         vault: truncate(raw.vault, 128),
         title: title,
         itemType: truncate(raw.itemType, 32),
-        username: "",
         hasTotp: undefined
       })
     }

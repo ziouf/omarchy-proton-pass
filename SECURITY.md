@@ -31,7 +31,7 @@ plugin; each is declared and justified below.
 | `manifest.json`, `Pass.qml`, `Main.qml`, `I18n.js` | Bar widget + panel; spawns `pass-cli`, `wl-copy`, `notify-send`, `omarchy-shell`, `wtype` |
 | `scripts/copy-secret`, `scripts/copy-value` | Clipboard copy via `0600` tmpfs buffer + auto-clear; `x-kde-passwordManagerHint` set so the Omarchy clipboard manager excludes secrets from history |
 | `scripts/pass-cache-update` | Writes `~/.cache/ziouf.proton-pass/items.json` (mode `0600`): item ids, titles, vault names, types — **never secrets** |
-| `scripts/pass-pick`, `scripts/pass-autotype` | Read the cache; summon the Omarchy menu picker; `wtype` types into the focused window after a 3-second notice |
+| `scripts/pass-pick`, `scripts/pass-autotype` | Read the cache; summon the Omarchy menu picker; `wtype` types into the focused window after a 3-second notice — secrets travel over stdin, never process arguments |
 | `scripts/pass-session-guard` | Polls the desktop lock state; runs `pass-cli session lock` on lock |
 | `scripts/install-services.sh`, `uninstall-services.sh` | `~/.config/systemd/user/proton-pass-*`, `~/.config/environment.d/90-proton-pass.conf`, `~/.cache/ziouf.proton-pass/` (uninstall only) |
 | `systemd/*.service`, `systemd/*.timer` | The three user units described above |

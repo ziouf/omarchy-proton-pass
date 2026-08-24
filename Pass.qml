@@ -81,9 +81,7 @@ Panel {
     for (var i = 0; i < pass.items.length; i++) {
       var item = pass.items[i]
       if (currentVault !== "" && item.vault !== currentVault) continue
-      if (q !== ""
-          && item.title.toLowerCase().indexOf(q) < 0
-          && String(item.username || "").toLowerCase().indexOf(q) < 0) continue
+      if (q !== "" && item.title.toLowerCase().indexOf(q) < 0) continue
       out.push(item)
     }
     return out
@@ -874,6 +872,13 @@ Panel {
     if (!field) return
     if (field.field === "totp" && currentItem) {
       copyFor(currentItem, "totp")
+      return
+    }
+    // Oversized values are truncated in the model (resource caps): re-fetch
+    // the field fresh so the clipboard copy stays complete. Extra fields
+    // resolve by label in the pass:// URI.
+    if (field.truncated === true && currentItem) {
+      copyFor(currentItem, String(field.field || field.label || ""))
       return
     }
     pass.copyValue(String(field.label || field.field || "champ"),

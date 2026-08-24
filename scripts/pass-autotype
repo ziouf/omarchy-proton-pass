@@ -5,8 +5,10 @@
 # usage: pass-autotype <vault-or-share-id> <item-id-or-title>
 #
 # Safety: a 3-second heads-up notification lets you cancel by switching focus
-# or closing; no Enter is ever typed. Secrets are fetched into 0600 tmpfs
-# buffers and shredded immediately.
+# or closing; no Enter is ever typed. Secrets travel via stdin (never process
+# arguments, so they stay out of /proc/*/cmdline) and live in 0600 tmpfs
+# buffers that are shredded immediately. Set PASS_GENERIC_NOTIFY=1 to keep
+# item titles out of notifications.
 
 set -euo pipefail
 
@@ -14,7 +16,11 @@ share="${1:?usage: pass-autotype <vault> <item>}"
 item="${2:?usage: pass-autotype <vault> <item>}"
 
 runtime_dir="${XDG_RUNTIME_DIR:-/tmp}"
-fetch() { # fetch <field> <buffer>
+generic="${PASS_GENERIC_NOTIFY:-0}"
+
+fetch() { # fetch <field> <buffer> — $() strips the CLI formatting newline;
+          # trailing newlines are deliberately never typed (they would press
+          # Enter in the target window).
   local secret
   secret="$(pass-cli item view "pass://$share/$item/$1")" || return 1
   printf '%s' "$secret" > "$2"
@@ -42,11 +48,15 @@ notify-send -a "Proton Pass" -t 3000 "Autotype dans 3 s" "Fenêtre ciblée : fen
 sleep 3
 
 if [[ -n "$username" ]]; then
-  wtype -- "$username"
+  wtype - < "$user_buf"
   sleep 0.15
   wtype -k Tab
   sleep 0.15
 fi
-wtype -- "$(cat "$pass_buf")"
+wtype - < "$pass_buf"
 
-notify-send -a "Proton Pass" -t 2000 "Autotype terminé" "« $item »" 2>/dev/null || true
+if [[ "$generic" == "1" ]]; then
+  notify-send -a "Proton Pass" -t 2000 "Autotype terminé" 2>/dev/null || true
+else
+  notify-send -a "Proton Pass" -t 2000 "Autotype terminé" "« $item »" 2>/dev/null || true
+fi
