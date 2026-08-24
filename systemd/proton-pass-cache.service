@@ -2,6 +2,7 @@
 Description=Refresh the Proton Pass metadata cache (ziouf.proton-pass)
 
 [Service]
+Environment=PROTON_PASS_LINUX_KEYRING=dbus
 TimeoutStartSec=120
 Type=oneshot
 ExecStart=%h/.config/omarchy/plugins/ziouf.proton-pass/scripts/pass-cache-update

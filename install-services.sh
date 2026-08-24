@@ -13,6 +13,11 @@
 #   --cache          metadata cache refresh timer (instant autocomplete)
 #   --all            every component (default when none is given)
 #
+# Any install also exports PROTON_PASS_LINUX_KEYRING=dbus session-wide, so
+# pass-cli keeps its encryption key in the Secret Service (gnome-keyring)
+# instead of the kernel keyring, which is wiped on reboot and logout —
+# without it every boot forces a fresh `pass-cli login`.
+#
 #   --dry-run        print the planned actions without running them
 #   --yes, -y        skip the confirmation prompt (non-interactive)
 
@@ -52,9 +57,10 @@ command -v pass-cli >/dev/null 2>&1 || {
 # ---------------------------------------------------------------- action plan
 # Each step is "kind:value"; execute_plan() dispatches on the kind.
 plan=()
-(( want_agent )) && plan+=("unit:proton-pass-ssh-agent.service" "env:1")
+(( want_agent )) && plan+=("unit:proton-pass-ssh-agent.service")
 (( want_guard )) && plan+=("unit:proton-pass-session-guard.service")
 (( want_cache )) && plan+=("unit:proton-pass-cache.service" "unit:proton-pass-cache.timer")
+plan+=("env:1")
 plan+=("daemon-reload:1")
 
 enable_units=""
@@ -93,11 +99,15 @@ for step in "${plan[@]}"; do
       install -Dm644 "$PLUGIN_DIR/systemd/$value" "$SYSTEMD_DIR/$value"
       ;;
     env)
-      echo "→ export SSH_AUTH_SOCK session-wide"
+      echo "→ export session-wide environment (keyring backend, SSH socket)"
       mkdir -p "$ENV_DIR"
-      # environment.d does not expand systemd specifiers (%h), so bake the
-      # absolute home path at install time.
-      printf 'SSH_AUTH_SOCK=%s\n' "$HOME/.ssh/proton-pass-agent.sock" > "$ENV_DIR/90-proton-pass.conf"
+      {
+        # environment.d does not expand systemd specifiers (%h), so bake the
+        # absolute home path at install time.
+        printf 'PROTON_PASS_LINUX_KEYRING=dbus\n'
+        printf 'SSH_AUTH_SOCK=%s\n' "$HOME/.ssh/proton-pass-agent.sock"
+      } > "$ENV_DIR/90-proton-pass.conf"
+      systemctl --user set-environment PROTON_PASS_LINUX_KEYRING=dbus
       ;;
     daemon-reload)
       echo "→ systemctl --user daemon-reload"

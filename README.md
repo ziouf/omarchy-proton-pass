@@ -217,6 +217,14 @@ omarchy-shell ziouf.proton-pass openItem <itemId>   # open the panel on an item'
   see `pass-cli session create-lock --idle-timeout 900`). This is by design:
   after a long suspend the panel offers **Sign in** again instead of
   unlock. Short suspends under the timeout keep the session recoverable.
+- **Re-login required after every reboot** — pass-cli defaults to storing
+  its encryption key in the Linux kernel keyring, which the kernel wipes on
+  reboot and logout. `install-services.sh` exports
+  `PROTON_PASS_LINUX_KEYRING=dbus` so the key lives in the Secret Service
+  (gnome-keyring, unlocked at login via PAM) and authentication persists
+  across reboots, logouts, and suspend. Switching backends invalidates the
+  previous session: log in once more afterwards
+  (`pass-cli login` or the panel's **Sign in**).
 
 ## Settings
 

@@ -3,6 +3,9 @@ Description=Proton Pass CLI SSH agent
 Documentation=https://protonpass.github.io/pass-cli/commands/ssh-agent/
 
 [Service]
+# Keep the encryption key in the Secret Service so the session survives
+# reboots; the kernel keyring default is wiped at every boot.
+Environment=PROTON_PASS_LINUX_KEYRING=dbus
 ExecStart=/usr/bin/pass-cli ssh-agent start --socket-path %h/.ssh/proton-pass-agent.sock
 Restart=on-failure
 RestartSec=5

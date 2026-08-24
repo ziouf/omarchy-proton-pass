@@ -2,6 +2,7 @@
 Description=Lock the Proton Pass CLI session when the desktop locks
 
 [Service]
+Environment=PROTON_PASS_LINUX_KEYRING=dbus
 ExecStart=%h/.config/omarchy/plugins/ziouf.proton-pass/scripts/pass-session-guard
 Restart=on-failure
 RestartSec=5
