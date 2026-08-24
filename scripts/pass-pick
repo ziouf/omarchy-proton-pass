@@ -105,6 +105,10 @@ fmt() { # fmt <template> <arg1> [arg2]
   printf '%s' "$out"
 }
 
+PICK_LOG="${CACHE_DIR}/picker.log"
+plog() { echo "$(date '+%H:%M:%S.%3N') $*" >> "$PICK_LOG" 2>/dev/null || true; }
+plog "=== start pid=$$ label=${PASS_PICK_LABEL:+set} field=${PASS_PICK_FIELD:+set}"
+
 shell_alive() { omarchy-shell shell ping >/dev/null 2>&1; }
 
 close_picker_menu() {
@@ -138,7 +142,12 @@ wait_selection() { # wait_selection <sel-file> <done-file> -> echoes choice
     [[ -s "$done_f" || -s "$sel" ]] && break
     sleep 0.5
   done
+  plog "wait end: sel=$(stat -c%s "$sel" 2>/dev/null || echo absent)B done=$(stat -c%s "$done_f" 2>/dev/null || echo absent)B"
   cat "$sel" 2>/dev/null || true
+  # Consume both files: the next summon must start from a clean slate or its
+  # wait would return instantly with this stale selection.
+  : > "$sel" 2>/dev/null || true
+  : > "$done_f" 2>/dev/null || true
 }
 
 # --- cache ----------------------------------------------------------------
@@ -192,12 +201,19 @@ if [[ -n "${PASS_PICK_LABEL:-}" ]]; then
   choice="$PASS_PICK_LABEL"
 else
   labels_json="$(cut -f1 "$labels_tsv" | jq -R . | jq -s .)"
-  summon_select "$prompt_items" "$labels_json" "$sel_file" "$done_file" || exit 1
+  : > "$sel_file" 2>/dev/null; : > "$done_file" 2>/dev/null
+  plog "summon items (${#labels_tsv} bytes map)"
+  summon_select "$prompt_items" "$labels_json" "$sel_file" "$done_file"
+  plog "summon rc=$? — waiting"
+  summon_rc=$?
+  (( summon_rc != 0 )) && { plog "summon FAILED"; exit 1; }
   choice="$(wait_selection "$sel_file" "$done_file")"
+  plog "choice='${choice:0:60}'"
   [[ -z "$choice" ]] && exit 0    # cancelled
 fi
 
 ref="$(awk -F'\t' -v c="$choice" '$1 == c { print $2; exit }' "$labels_tsv")"
+plog "ref=${ref:0:20}…"
 if [[ -z "$ref" ]]; then
   # Fallback for a stale cache hit: refresh in the background and give up.
   setsid timeout 120 "$SCRIPT_DIR/pass-cache-update" >/dev/null 2>&1 <&- &
@@ -208,9 +224,11 @@ item_id="${ref#*|}"
 
 # --- fetch the item: the action menu adapts to its real fields ------------
 item_json="$(timeout 25 pass-cli item view --output json "pass://$share_id/$item_id" 2>/dev/null)" || {
+  plog "item fetch FAILED"
   notify-send -a "Proton Pass" -u critical "$msg_item_fail" 2>/dev/null || true
   exit 1
 }
+plog "item fetched (${#item_json} bytes)"
 
 # field_map: "<action label>\t<action>" — only fields that actually exist.
 # The typed payload (Login, Note, SshKey, …) is the first object entry of
@@ -249,17 +267,23 @@ jq -r '
   | @tsv' <<<"$item_json" >> "$field_map"
 
 printf '%s\t%s\n' "$a_detail" "detail" >> "$field_map"
+plog "field map rows=$(wc -l < "$field_map")"
 
 # --- action picker --------------------------------------------------------
 action="${PASS_PICK_FIELD:-}"
 if [[ -z "$action" ]]; then
   fields_json="$(cut -f1 "$field_map" | jq -R . | jq -s .)"
-  summon_select "$prompt_field" "$fields_json" "$sel_file" "$done_file" || exit 1
+  : > "$sel_file" 2>/dev/null; : > "$done_file" 2>/dev/null
+  plog "summon actions"
+  summon_select "$prompt_field" "$fields_json" "$sel_file" "$done_file"
+  plog "summon rc=$? — waiting"
   action="$(wait_selection "$sel_file" "$done_file")"
+  plog "action='${action:0:60}'"
   [[ -z "$action" ]] && exit 0    # cancelled
 fi
 
 dispatch="$(awk -F'\t' -v c="$action" '$1 == c { print $2; exit }' "$field_map")"
+plog "dispatch='${dispatch:0:40}'"
 [[ -z "$dispatch" ]] && exit 0
 
 # --- dispatch -------------------------------------------------------------
@@ -320,7 +344,10 @@ case "$dispatch" in
     exec "$SCRIPT_DIR/pass-autotype" "$share_id" "$item_id"
     ;;
   detail)
+    # exec skips the EXIT trap: clean the temp files by hand first.
+    rm -f "$labels_tsv" "$sel_file" "$done_file" "$field_map"
     close_picker_menu
+    plog "exec openItem"
     exec omarchy-shell ziouf.proton-pass openItem "$item_id"
     ;;
   *)
