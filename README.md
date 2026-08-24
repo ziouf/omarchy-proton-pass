@@ -8,6 +8,10 @@ desktop lock.
 
 ![category](https://img.shields.io/badge/category-Security-blue)
 
+> **Scope & security:** the plugin never installs packages, never runs as
+> root and never writes secrets to disk. See [SECURITY.md](SECURITY.md) for
+> the full capability declaration.
+
 ## Features
 
 - **Bar widget** — a key icon reflecting the pass-cli session state
@@ -49,8 +53,8 @@ language is a single block in `I18n.js`.
 
 - [Omarchy](https://omarchy.org)
 - [`proton-pass-cli`](https://aur.archlinux.org/packages/proton-pass-cli) from
-  the AUR: `yay -S proton-pass-cli` (or `pacman -S proton-pass-cli` if you use
-  a helper that builds it into your repos)
+  the AUR — **a prerequisite you install yourself**; the plugin never invokes
+  a package manager (e.g. `yay -S proton-pass-cli`)
 - A Proton Pass account, authenticated once with `pass-cli login`
 - `wl-clipboard` (present on stock Omarchy) for clipboard support
 
@@ -82,9 +86,14 @@ pass-cli session create-lock
 ~/.config/omarchy/plugins/ziouf.proton-pass/install-services.sh
 ```
 
-This installs two systemd user services and exports `SSH_AUTH_SOCK`
-session-wide (`~/.config/environment.d/90-proton-pass.conf`). New sessions
-then resolve SSH keys stored in your Proton Pass vaults.
+Components can be selected individually (`--ssh-agent`, `--session-guard`,
+`--cache`, `--all`), previewed with `--dry-run`, and run without the
+confirmation prompt using `--yes`. The script refuses to run as root.
+
+This installs the selected systemd user services and — with the SSH agent —
+exports `SSH_AUTH_SOCK` session-wide
+(`~/.config/environment.d/90-proton-pass.conf`). New sessions then resolve
+SSH keys stored in your Proton Pass vaults.
 
 > Import existing keys so ssh keeps working:
 > `pass-cli item create ssh-key import --from-private-key ~/.ssh/id_ed25519 --title "$(hostname)"`
