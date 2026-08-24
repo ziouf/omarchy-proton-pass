@@ -44,6 +44,14 @@ desktop lock.
 - **Launcher menu entries** — optional snippet to drive the plugin from the
   Omarchy menu (search / lock / unlock / login).
 
+## Text size
+
+The picker and the panel use the Omarchy shell type scale, so they follow
+the system text size: `omarchy display text size <9-20|reset>` resizes the
+picker, the panel, and the launcher together (live, and it survives theme
+switches). Do not pin `[font]` per-token overrides in a theme `shell.toml` —
+they would freeze the plugin text at that size and defeat the system knob.
+
 ## Languages
 
 The interface and notifications follow the system locale
