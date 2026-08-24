@@ -107,6 +107,17 @@ fmt() { # fmt <template> <arg1> [arg2]
 
 shell_alive() { omarchy-shell shell ping >/dev/null 2>&1; }
 
+close_picker_menu() {
+  omarchy-shell shell hide omarchy.menu >/dev/null 2>&1 || true
+  # Wait until the menu layer is really gone so it cannot bury or steal
+  # focus from a panel summoned right after (max ~1.5 s).
+  command -v hyprctl >/dev/null 2>&1 || return 0
+  for _ in $(seq 1 15); do
+    hyprctl layers 2>/dev/null | grep -q "namespace: omarchy-menu" || return 0
+    sleep 0.1
+  done
+}
+
 summon_select() { # summon_select <prompt> <options-json> <sel-file> <done-file>
   shell_alive || {
     notify-send -a "Proton Pass" -u critical "$msg_shell_down" "$msg_shell_down_body" 2>/dev/null || true
@@ -305,6 +316,7 @@ case "$dispatch" in
     exec "$SCRIPT_DIR/pass-autotype" "$share_id" "$item_id"
     ;;
   detail)
+    close_picker_menu
     exec omarchy-shell ziouf.proton-pass openItem "$item_id"
     ;;
   *)

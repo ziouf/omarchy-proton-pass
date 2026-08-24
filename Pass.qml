@@ -136,9 +136,12 @@ Panel {
     view = "detail"
   }
 
+  property string pendingOpenItemId: ""
+
   // Deep-link entry (pass-pick "detail" action, IPC): open the panel straight
-  // onto an item's detail view. Falls back to a plain open + refresh when the
-  // id is not in the loaded data yet.
+  // onto an item's detail view. When the id is not in the loaded data yet
+  // (fresh shell, walk in flight, session just restored), the navigation is
+  // retried once the item list lands instead of leaving the panel on vaults.
   function openItemById(id) {
     var wanted = String(id || "")
     root.open()
@@ -147,9 +150,11 @@ Panel {
       if (pass.items[i].itemId === wanted) {
         currentVault = ""
         openDetail(pass.items[i])
+        pendingOpenItemId = ""
         return
       }
     }
+    pendingOpenItemId = wanted
     refreshNow()
   }
 
@@ -219,13 +224,32 @@ Panel {
     // fallback for when focus moves elsewhere.
     Qt.callLater(function() { searchField.forceActiveFocus() })
   } else {
-    // Panel closed: drop decrypted detail material from memory.
+    // Panel closed: drop decrypted detail material from memory and any
+    // deferred deep-link navigation.
     pass.clearDetail()
+    pendingOpenItemId = ""
   }
 
   Connections {
     target: pass
-    function onDataRevisionChanged() { root.clampIndex() }
+    function onDataRevisionChanged() {
+      root.clampIndex()
+      // Deferred deep-link: navigate as soon as the wanted item shows up.
+      if (root.pendingOpenItemId !== "") {
+        for (var i = 0; i < pass.items.length; i++) {
+          if (pass.items[i].itemId === root.pendingOpenItemId) {
+            var wanted = root.pendingOpenItemId
+            root.pendingOpenItemId = ""
+            currentVault = ""
+            openDetail(pass.items[i])
+            return
+          }
+        }
+        // Walk finished without it (deleted, or no session): stop retrying.
+        if (!pass.itemsLoading && pass.items.length > 0)
+          root.pendingOpenItemId = ""
+      }
+    }
   }
 
   // ------------------------------------------------------------------ IPC
