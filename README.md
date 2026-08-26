@@ -147,19 +147,19 @@ Append to `~/.config/omarchy/extensions/omarchy-menu.jsonc`:
   "trigger.pass.lock": {
     "icon": "\uf023",
     "label": "Verrouiller la session",
-    "when": "timeout 10 pass-cli info 2>/dev/null | grep -qi 'has lock: yes'",
+    "when": "PROTON_PASS_LINUX_KEYRING=${PROTON_PASS_LINUX_KEYRING:-dbus} timeout 10 pass-cli info 2>/dev/null | grep -qi 'has lock: yes'",
     "action": "omarchy-shell ziouf.proton-pass lock"
   },
   "trigger.pass.unlock": {
     "icon": "\uf09c",
     "label": "Déverrouiller la session",
-    "when": "pass-cli info 2>&1 | grep -qi locked",
+    "when": "PROTON_PASS_LINUX_KEYRING=${PROTON_PASS_LINUX_KEYRING:-dbus} pass-cli info 2>&1 | grep -qiE 'has lock: yes|locked'",
     "action": "omarchy-shell ziouf.proton-pass unlock"
   },
   "trigger.pass.login": {
     "icon": "\ue282",
     "label": "Connexion Proton Pass",
-    "when": "! timeout 10 pass-cli info >/dev/null 2>&1",
+    "when": "PROTON_PASS_LINUX_KEYRING=${PROTON_PASS_LINUX_KEYRING:-dbus} timeout 10 pass-cli info 2>&1 | grep -qiE 'no session|authenticated client|not logged|login required'",
     "action": "omarchy-shell ziouf.proton-pass login"
   }
 }
