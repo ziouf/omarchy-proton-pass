@@ -699,7 +699,12 @@ Item {
     Quickshell.execDetached(["omarchy-launch-floating-terminal-with-presentation", prefix + command])
   }
 
-  function login() { launchTerminal("pass-cli login") }
+  // A force-logout (e.g. a pass-cli call that fell back to the kernel
+  // keyring) can leave a partial local state (.session/pass-cli.db without a
+  // session.json) that makes `pass-cli login` fail immediately with
+  // "non-existent session" and the floating terminal opens blank. Drop any
+  // stale local state before login so the web flow can always start fresh.
+  function login() { launchTerminal("pass-cli logout --force >/dev/null 2>&1; pass-cli login") }
 
   function unlock() { launchTerminal("pass-cli session unlock") }
 
