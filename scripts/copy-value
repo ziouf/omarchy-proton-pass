@@ -17,46 +17,13 @@ label="${2:?}"
 kind="${3:-value}"
 clear_after="${4:-30}"
 
-# --- i18n -----------------------------------------------------------------
-raw_lang="${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
-lang="$(echo "${raw_lang%%.*}" | cut -d_ -f1 | tr '[:upper:]' '[:lower:]')"
-case "$lang" in fr|zh) ;; *) lang="en" ;; esac
-generic="${PASS_GENERIC_NOTIFY:-0}"
-
-if [[ "$lang" == "fr" ]]; then
-  msg_copied="Copié"
-  kind_secret="secret"
-  kind_value="valeur"
-  msg_of_item='%1 « %2 » (%3 s)'
-  msg_generic='%1 copié (%2 s)'
-elif [[ "$lang" == "zh" ]]; then
-  msg_copied="已复制"
-  kind_secret="机密"
-  kind_value="值"
-  msg_of_item='%2 的 %1（%3 秒）'
-  msg_generic='%1 已复制（%2 秒）'
-else
-  msg_copied="Copied"
-  kind_secret="secret"
-  kind_value="value"
-  msg_of_item='%1 "%2" (%3 s)'
-  msg_generic='%1 copied (%2 s)'
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/i18n.sh"
 
 case "$kind" in
   secret|password) display_kind="$kind_secret" ;;
   *)               display_kind="$kind_value" ;;
 esac
-
-fmt() { # fmt <template> <arg1> [arg2] [arg3]
-  local out="$1"; shift
-  local i=1
-  while (( $# > 0 )); do
-    out="${out//%$i/$1}"
-    shift; ((i++))
-  done
-  printf '%s' "$out"
-}
 
 command -v wl-copy >/dev/null 2>&1 || exit 1
 [[ -f $file ]] || exit 1

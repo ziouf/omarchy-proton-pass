@@ -1,7 +1,7 @@
 #!/bin/bash
-# install-services.sh — optional system integration for the ziouf.proton-pass
-# Omarchy plugin. User-scope only: refuses root, never installs packages.
-# See SECURITY.md for the full capability declaration.
+# install-services.sh — install the user-scope Proton Pass systemd units.
+# User-scope only: refuses root. The plugin itself is added with
+# `omarchy plugin add ziouf.proton-pass`.
 #
 # Usage:
 #   install-services.sh [--ssh-agent] [--session-guard] [--cache] [--all]
@@ -54,32 +54,16 @@ command -v pass-cli >/dev/null 2>&1 || {
   exit 1
 }
 
-# ---------------------------------------------------------------- action plan
-# Each step is "kind:value"; execute_plan() dispatches on the kind.
-plan=()
-(( want_agent )) && plan+=("unit:proton-pass-ssh-agent.service")
-(( want_guard )) && plan+=("unit:proton-pass-session-guard.service")
-(( want_cache )) && plan+=("unit:proton-pass-cache.service" "unit:proton-pass-cache.timer")
-plan+=("env:1")
-plan+=("daemon-reload:1")
-
-enable_units=""
-(( want_agent )) && enable_units+=" proton-pass-ssh-agent.service"
-(( want_guard )) && enable_units+=" proton-pass-session-guard.service"
-(( want_cache )) && enable_units+=" proton-pass-cache.timer"
-plan+=("enable:$enable_units")
-(( want_agent )) && plan+=("set-env:1")
-
+# ---------------------------------------------------------------- action list
 echo "Planned actions:"
-for step in "${plan[@]}"; do
-  case "${step%%:*}" in
-    unit)         echo "  → install systemd/${step#*:}" ;;
-    env)          echo "  → export SSH_AUTH_SOCK session-wide (environment.d)" ;;
-    daemon-reload) echo "  → systemctl --user daemon-reload" ;;
-    enable)       echo "  → systemctl --user enable --now${step#*:}" ;;
-    set-env)      echo "  → systemctl --user set-environment SSH_AUTH_SOCK" ;;
-  esac
-done
+(( want_agent )) && echo "  → install systemd/proton-pass-ssh-agent.service"
+(( want_guard )) && echo "  → install systemd/proton-pass-session-guard.service"
+(( want_cache )) && { echo "  → install systemd/proton-pass-cache.service"; echo "  → install systemd/proton-pass-cache.timer"; }
+echo "  → export PROTON_PASS_LINUX_KEYRING=dbus + SSH_AUTH_SOCK (environment.d)"
+echo "  → systemctl --user daemon-reload"
+(( want_agent )) && echo "  → enable proton-pass-ssh-agent.service"
+(( want_guard )) && echo "  → enable proton-pass-session-guard.service"
+(( want_cache )) && echo "  → enable proton-pass-cache.timer"
 
 if (( dry_run )); then
   echo "Dry run — nothing was changed."
@@ -91,39 +75,25 @@ if (( ! assume_yes )) && [[ -t 0 ]]; then
   [[ $answer =~ ^[Yy] ]] || { echo "Aborted."; exit 0; }
 fi
 
-for step in "${plan[@]}"; do
-  kind="${step%%:*}"; value="${step#*:}"
-  case "$kind" in
-    unit)
-      echo "→ install systemd/$value"
-      install -Dm644 "$PLUGIN_DIR/systemd/$value" "$SYSTEMD_DIR/$value"
-      ;;
-    env)
-      echo "→ export session-wide environment (keyring backend, SSH socket)"
-      mkdir -p "$ENV_DIR"
-      {
-        # environment.d does not expand systemd specifiers (%h), so bake the
-        # absolute home path at install time.
-        printf 'PROTON_PASS_LINUX_KEYRING=dbus\n'
-        printf 'SSH_AUTH_SOCK=%s\n' "$HOME/.ssh/proton-pass-agent.sock"
-      } > "$ENV_DIR/90-proton-pass.conf"
-      systemctl --user set-environment PROTON_PASS_LINUX_KEYRING=dbus
-      ;;
-    daemon-reload)
-      echo "→ systemctl --user daemon-reload"
-      systemctl --user daemon-reload
-      ;;
-    enable)
-      echo "→ systemctl --user enable --now$value"
-      # shellcheck disable=SC2086
-      systemctl --user enable --now $value
-      ;;
-    set-env)
-      echo "→ systemctl --user set-environment SSH_AUTH_SOCK"
-      systemctl --user set-environment SSH_AUTH_SOCK="$HOME/.ssh/proton-pass-agent.sock"
-      ;;
-  esac
-done
+echo "Installing..."
+(( want_agent )) && install -Dm644 "$PLUGIN_DIR/systemd/proton-pass-ssh-agent.service"   "$SYSTEMD_DIR/proton-pass-ssh-agent.service"
+(( want_guard )) && install -Dm644 "$PLUGIN_DIR/systemd/proton-pass-session-guard.service" "$SYSTEMD_DIR/proton-pass-session-guard.service"
+(( want_cache )) && { install -Dm644 "$PLUGIN_DIR/systemd/proton-pass-cache.service"   "$SYSTEMD_DIR/proton-pass-cache.service"; install -Dm644 "$PLUGIN_DIR/systemd/proton-pass-cache.timer"   "$SYSTEMD_DIR/proton-pass-cache.timer"; }
+
+# environment.d does not expand systemd specifiers (%h), so bake the absolute
+# home path at install time.
+mkdir -p "$ENV_DIR"
+{
+  printf 'PROTON_PASS_LINUX_KEYRING=dbus\n'
+  printf 'SSH_AUTH_SOCK=%s\n' "$HOME/.ssh/proton-pass-agent.sock"
+} > "$ENV_DIR/90-proton-pass.conf"
+systemctl --user set-environment PROTON_PASS_LINUX_KEYRING=dbus
+
+systemctl --user daemon-reload
+
+(( want_agent )) && { systemctl --user enable --now proton-pass-ssh-agent.service; systemctl --user set-environment SSH_AUTH_SOCK="$HOME/.ssh/proton-pass-agent.sock"; }
+(( want_guard )) && systemctl --user enable --now proton-pass-session-guard.service
+(( want_cache )) && systemctl --user enable --now proton-pass-cache.timer
 
 echo
 echo "Done. Components installed:"

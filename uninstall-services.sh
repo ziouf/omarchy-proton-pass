@@ -35,23 +35,11 @@ done
 (( want_all )) && { want_agent=1; want_guard=1; want_cache=1; }
 (( want_agent || want_guard || want_cache )) || { want_agent=1; want_guard=1; want_cache=1; }
 
-plan=()
-(( want_agent )) && plan+=("disable:proton-pass-ssh-agent.service" "rmunit:proton-pass-ssh-agent.service" "rmenv:1")
-(( want_guard )) && plan+=("disable:proton-pass-session-guard.service" "rmunit:proton-pass-session-guard.service")
-(( want_cache )) && plan+=("disable-timer:proton-pass-cache.timer" "rmunit:proton-pass-cache.service" "rmunit:proton-pass-cache.timer" "rmcache:1")
-plan+=("daemon-reload:1")
-
 echo "Planned actions:"
-for step in "${plan[@]}"; do
-  case "${step%%:*}" in
-    disable)     echo "  → systemctl --user disable --now ${step#*:}" ;;
-    disable-timer) echo "  → systemctl --user disable --now ${step#*:}" ;;
-    rmunit)      echo "  → remove $SYSTEMD_DIR/${step#*:}" ;;
-    rmenv)       echo "  → remove $ENV_FILE" ;;
-    rmcache)     echo "  → remove $CACHE_DIR" ;;
-    daemon-reload) echo "  → systemctl --user daemon-reload" ;;
-  esac
-done
+(( want_agent )) && echo "  → disable + remove proton-pass-ssh-agent.service (and env file)"
+(( want_guard )) && echo "  → disable + remove proton-pass-session-guard.service"
+(( want_cache )) && { echo "  → disable + remove proton-pass-cache.{service,timer}"; echo "  → remove $CACHE_DIR"; }
+echo "  → systemctl --user daemon-reload"
 
 if (( dry_run )); then
   echo "Dry run — nothing was changed."
@@ -63,35 +51,11 @@ if (( ! assume_yes )) && [[ -t 0 ]]; then
   [[ $answer =~ ^[Yy] ]] || { echo "Aborted."; exit 0; }
 fi
 
-for step in "${plan[@]}"; do
-  kind="${step%%:*}"; value="${step#*:}"
-  case "$kind" in
-    disable)
-      echo "→ systemctl --user disable --now $value"
-      systemctl --user disable --now "$value" 2>/dev/null || true
-      ;;
-    disable-timer)
-      echo "→ systemctl --user disable --now $value"
-      systemctl --user disable --now "$value" 2>/dev/null || true
-      ;;
-    rmunit)
-      echo "→ remove $SYSTEMD_DIR/$value"
-      rm -f "$SYSTEMD_DIR/$value"
-      ;;
-    rmenv)
-      echo "→ remove $ENV_FILE"
-      rm -f "$ENV_FILE"
-      ;;
-    rmcache)
-      echo "→ remove $CACHE_DIR"
-      rm -rf "$CACHE_DIR"
-      ;;
-    daemon-reload)
-      echo "→ systemctl --user daemon-reload"
-      systemctl --user daemon-reload
-      ;;
-  esac
-done
+echo "Uninstalling..."
+(( want_agent )) && { systemctl --user disable --now proton-pass-ssh-agent.service   2>/dev/null || true; rm -f "$SYSTEMD_DIR/proton-pass-ssh-agent.service";   rm -f "$ENV_FILE"; }
+(( want_guard )) && { systemctl --user disable --now proton-pass-session-guard.service 2>/dev/null || true; rm -f "$SYSTEMD_DIR/proton-pass-session-guard.service"; }
+(( want_cache )) && { systemctl --user disable --now proton-pass-cache.timer         2>/dev/null || true; rm -f "$SYSTEMD_DIR/proton-pass-cache.service"; rm -f "$SYSTEMD_DIR/proton-pass-cache.timer"; rm -rf "$CACHE_DIR"; }
+systemctl --user daemon-reload
 
 echo
 echo "Removed the selected components and stopped the pass-cli SSH agent."

@@ -12,6 +12,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/i18n.sh"
+
 # Keep the encryption key in the Secret Service so sessions survive reboots;
 # the kernel keyring default is wiped at every boot. Respect an explicit override.
 export PROTON_PASS_LINUX_KEYRING="${PROTON_PASS_LINUX_KEYRING:-dbus}"
@@ -20,7 +23,6 @@ share="${1:?usage: pass-autotype <vault> <item>}"
 item="${2:?usage: pass-autotype <vault> <item>}"
 
 runtime_dir="${XDG_RUNTIME_DIR:-/tmp}"
-generic="${PASS_GENERIC_NOTIFY:-0}"
 
 fetch() { # fetch <field> <buffer> — $() strips the CLI formatting newline;
           # trailing newlines are deliberately never typed (they would press
@@ -31,7 +33,7 @@ fetch() { # fetch <field> <buffer> — $() strips the CLI formatting newline;
 }
 
 command -v wtype >/dev/null 2>&1 || {
-  notify-send -a "Proton Pass" -u critical "wtype manquant" 2>/dev/null || true
+  notify-send -a "Proton Pass" -u critical "$msg_wtype_missing_title" 2>/dev/null || true
   exit 1
 }
 
@@ -42,13 +44,13 @@ chmod 600 "$user_buf" "$pass_buf"
 
 if ! fetch username "$user_buf"; then printf '' > "$user_buf"; fi
 fetch password "$pass_buf" || {
-  notify-send -a "Proton Pass" -u critical "Échec de lecture" "mot de passe pour « $item »" 2>/dev/null || true
+  notify-send -a "Proton Pass" -u critical "$(fmt "$msg_read_failed_autotype_body" "$item")" 2>/dev/null || true
   exit 1
 }
 
 username="$(cat "$user_buf")"
 
-notify-send -a "Proton Pass" -t 3000 "Autotype dans 3 s" "Fenêtre ciblée : fenêtre active" 2>/dev/null || true
+notify-send -a "Proton Pass" -t 3000 "$msg_autotype_soon_body" 2>/dev/null || true
 sleep 3
 
 if [[ -n "$username" ]]; then
@@ -60,7 +62,7 @@ fi
 wtype - < "$pass_buf"
 
 if [[ "$generic" == "1" ]]; then
-  notify-send -a "Proton Pass" -t 2000 "Autotype terminé" 2>/dev/null || true
+  notify-send -a "Proton Pass" -t 2000 "$msg_autotype_done_body_generic" 2>/dev/null || true
 else
-  notify-send -a "Proton Pass" -t 2000 "Autotype terminé" "« $item »" 2>/dev/null || true
+  notify-send -a "Proton Pass" -t 2000 "$(fmt "$msg_autotype_done_body" "$item")" 2>/dev/null || true
 fi
