@@ -68,13 +68,9 @@ var catalogs = {
     "create.titleField": "Title",
     "create.username": "Username (optional)",
     "create.password": "Password",
-    "create.generate": "Generate",
-    "create.generating": "A random password will be generated.",
     "create.cancel": "Cancel",
     "create.confirm": "Create",
     "create.creating": "Creating…",
-    "create.vaultHint": "Vault list is still loading.",
-    "notify.created": "Secret \"%1\" created",
 
     // Field labels shown in the item detail view
     "field.email": "Email",
@@ -177,13 +173,9 @@ var catalogs = {
     "create.titleField": "标题",
     "create.username": "用户名（可选）",
     "create.password": "密码",
-    "create.generate": "生成",
-    "create.generating": "将生成随机密码。",
     "create.cancel": "取消",
     "create.confirm": "创建",
     "create.creating": "创建中…",
-    "create.vaultHint": "保管库列表正在加载。",
-    "notify.created": "密钥“%1”已创建",
 
     // Field labels shown in the item detail view
     "field.email": "邮箱",
@@ -279,13 +271,9 @@ var catalogs = {
     "create.titleField": "Titre",
     "create.username": "Identifiant (optionnel)",
     "create.password": "Mot de passe",
-    "create.generate": "Générer",
-    "create.generating": "Un mot de passe aléatoire sera généré.",
     "create.cancel": "Annuler",
     "create.confirm": "Créer",
     "create.creating": "Création…",
-    "create.vaultHint": "La liste des coffres est encore en chargement.",
-    "notify.created": "Secret « %1 » créé",
 
     // Field labels shown in the item detail view
     "field.email": "E-mail",

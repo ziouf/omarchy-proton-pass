@@ -39,7 +39,6 @@ Panel {
 
   // Create-secret popup state.
   property bool createOpen: false
-  property bool generatePassword: false
   property string createVaultValue: ""
 
   // System locale selects the UI language (LC_ALL > LC_MESSAGES > LANG >
@@ -203,7 +202,6 @@ Panel {
     root.createVaultValue = root.currentVault !== ""
                            ? root.currentVault
                            : (pass.vaults.length > 0 ? String(pass.vaults[0]) : "")
-    root.generatePassword = false
     createTitleField.text = ""
     createUsernameField.text = ""
     createPasswordField.text = ""
@@ -225,11 +223,11 @@ Panel {
       title: title,
       username: createUsernameField.text.trim() || null,
       email: null,
-      password: root.generatePassword ? null : (createPasswordField.text || null),
+      password: createPasswordField.text || null,
       totp_uri: null,
       urls: []
     }
-    pass.submitCreate(vault, title, JSON.stringify(template))
+    pass.submitCreate(vault, JSON.stringify(template), createPasswordField.text === "")
   }
 
   function statusIcon() {
@@ -287,10 +285,6 @@ Panel {
     function onCreateDoneChanged() {
       if (pass.createDone) root.closeCreatePopup()
     }
-  }
-
-  Connections {
-    target: pass
     function onDataRevisionChanged() {
       root.clampIndex()
       // Deferred deep-link: navigate as soon as the wanted item shows up.
@@ -670,46 +664,17 @@ Panel {
               Keys.onEscapePressed: root.closeCreatePopup()
             }
 
-            Row {
+            TextField {
+              id: createPasswordField
               width: parent.width
-              spacing: Style.space(8)
-
-              TextField {
-                id: createPasswordField
-                visible: !root.generatePassword
-                width: parent.width - generateBtn.width - parent.spacing
-                placeholderText: root.tr("create.password")
-                foreground: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                password: true
-                Keys.onReturnPressed: root.submitCreateForm()
-                Keys.onEnterPressed: root.submitCreateForm()
-                Keys.onEscapePressed: root.closeCreatePopup()
-              }
-
-              Text {
-                visible: root.generatePassword
-                width: parent.width - generateBtn.width - parent.spacing
-                text: root.tr("create.generating")
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                anchors.verticalCenter: parent.verticalCenter
-                wrapMode: Text.WordWrap
-              }
-
-              Button {
-                id: generateBtn
-                text: root.tr("create.generate")
-                selected: root.generatePassword
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
-                bordered: true
-                anchors.verticalCenter: parent.verticalCenter
-                onClicked: root.generatePassword = !root.generatePassword
-              }
+              placeholderText: root.tr("create.password")
+              foreground: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              password: true
+              Keys.onReturnPressed: root.submitCreateForm()
+              Keys.onEnterPressed: root.submitCreateForm()
+              Keys.onEscapePressed: root.closeCreatePopup()
             }
 
             Text {
@@ -717,16 +682,6 @@ Panel {
               width: parent.width
               text: pass.createError
               color: root.urgent
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              wrapMode: Text.WordWrap
-            }
-
-            Text {
-              visible: pass.createError === "" && pass.vaults.length === 0
-              width: parent.width
-              text: root.tr("create.vaultHint")
-              color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
               wrapMode: Text.WordWrap
