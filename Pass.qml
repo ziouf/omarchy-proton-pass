@@ -37,6 +37,11 @@ Panel {
   property string query: ""
   property int selectedIndex: -1
 
+  // Create-secret popup state.
+  property bool createOpen: false
+  property bool generatePassword: false
+  property string createVaultValue: ""
+
   // System locale selects the UI language (LC_ALL > LC_MESSAGES > LANG >
   // Qt locale); English doubles as the fallback catalog.
   readonly property string lang: I18n.normalize(
@@ -194,6 +199,39 @@ Panel {
     if (pass.status === "unlocked") pass.refreshItems(force === true)
   }
 
+  function openCreatePopup() {
+    root.createVaultValue = root.currentVault !== ""
+                           ? root.currentVault
+                           : (pass.vaults.length > 0 ? String(pass.vaults[0]) : "")
+    root.generatePassword = false
+    createTitleField.text = ""
+    createUsernameField.text = ""
+    createPasswordField.text = ""
+    root.createOpen = true
+    Qt.callLater(function() { createTitleField.forceActiveFocus() })
+  }
+
+  function closeCreatePopup() {
+    root.createOpen = false
+    Qt.callLater(function() { searchField.forceActiveFocus() })
+  }
+
+  function submitCreateForm() {
+    var vault = root.createVaultValue
+    var title = createTitleField.text.trim()
+    if (vault === "" || title === "") return
+    // Password travels in the tmpfs template buffer, never in argv.
+    var template = {
+      title: title,
+      username: createUsernameField.text.trim() || null,
+      email: null,
+      password: root.generatePassword ? null : (createPasswordField.text || null),
+      totp_uri: null,
+      urls: []
+    }
+    pass.submitCreate(vault, title, JSON.stringify(template))
+  }
+
   function statusIcon() {
     // Key glyph (FA key); dimmed when logged out.
     return "\uF084"
@@ -242,6 +280,13 @@ Panel {
     // deferred deep-link navigation.
     pass.clearDetail()
     pendingOpenItemId = ""
+  }
+
+  Connections {
+    target: pass
+    function onCreateDoneChanged() {
+      if (pass.createDone) root.closeCreatePopup()
+    }
   }
 
   Connections {
@@ -355,7 +400,7 @@ Panel {
             }
 
             Column {
-              width: parent.width - backButton.width - (root.view !== "vaults" ? parent.spacing : 0)
+              width: Math.max(0, parent.width - backButton.width - headerActions.width - parent.spacing * 2)
               anchors.verticalCenter: parent.verticalCenter
               spacing: Style.space(2)
 
@@ -383,62 +428,39 @@ Panel {
                 elide: Text.ElideRight
               }
             }
-          }
 
-          // -------------------------------------------- status / actions
-          Row {
-            visible: root.view === "vaults"
-            width: parent.width
-            spacing: Style.space(8)
-
-            Text {
-
-                textFormat: Text.PlainText
-              text: root.statusLabel()
-              color: pass.status === "unlocked" ? root.foreground : root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-              anchors.verticalCenter: parent.verticalCenter
-              elide: Text.ElideRight
-              width: parent.width - actionsRow.width - parent.spacing
-            }
-
+            // Header shortcuts, replacing the former status/actions row:
+            // creation and resync while a session exists, sign-in when not.
             Row {
-              id: actionsRow
-              spacing: Style.space(6)
+              id: headerActions
+              spacing: Style.space(4)
+              anchors.verticalCenter: parent.verticalCenter
 
-              Button {
-                // Without a session there is nothing to unlock — the Sign in
-                // button next to it owns that state.
+              PanelActionButton {
+                iconText: "\uF067"                   // plus = new secret
                 visible: pass.status !== "logged-out"
-                text: pass.status === "unlocked"
-                      ? (pass.hasLockCode ? tr("action.lock") : tr("action.createLockCode"))
-                      : tr("action.unlock")
-                enabled: pass.status !== "checking" && pass.status !== "locked"
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
-                bordered: true
-                onClicked: {
-                  if (pass.status === "unlocked") {
-                    if (pass.hasLockCode) pass.lockSession()
-                    else pass.launchTerminal("pass-cli session create-lock --idle-timeout 900")
-                  } else {
-                    pass.unlock()
-                  }
-                }
+                foreground: root.dim
+                hoverColor: root.foreground
+                tooltipText: root.tr("header.newSecret")
+                onClicked: root.openCreatePopup()
               }
 
-              Button {
-                text: pass.status === "logged-out" ? tr("action.login") : tr("action.refresh")
-                enabled: !pass.itemsLoading
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
-                onClicked: {
-                  if (pass.status === "logged-out") pass.login()
-                  else root.refreshNow(true)
-                }
+              PanelActionButton {
+                iconText: "\uF021"                   // refresh = force resync
+                visible: pass.status !== "logged-out"
+                foreground: root.dim
+                hoverColor: root.foreground
+                tooltipText: root.tr("action.refresh")
+                onClicked: root.refreshNow(true)
+              }
+
+              PanelActionButton {
+                iconText: "\uF023"                   // lock = sign in
+                visible: pass.status === "logged-out"
+                foreground: root.dim
+                hoverColor: root.foreground
+                tooltipText: root.tr("action.login")
+                onClicked: pass.login()
               }
             }
           }
@@ -573,6 +595,169 @@ Panel {
           DetailView {
             visible: root.view === "detail"
             width: column.width
+          }
+        }
+      }
+
+      // ---------------------------------------------------- create popup
+      Rectangle {
+        id: createOverlay
+        visible: root.createOpen
+        anchors.fill: parent
+        z: 50
+        color: Util.alpha(Color.foreground, 0.30)
+
+        // Click outside the card cancels.
+        MouseArea {
+          anchors.fill: parent
+          onClicked: root.closeCreatePopup()
+        }
+
+        Rectangle {
+          id: createCard
+          anchors.centerIn: parent
+          width: Math.min(parent.width - Style.space(24), Style.space(320))
+          radius: Style.cornerRadius
+          color: Color.popups.background
+          border.color: Color.popups.border
+          border.width: 1
+
+          Column {
+            anchors.fill: parent
+            anchors.margins: Style.space(16)
+            spacing: Style.space(10)
+
+            Text {
+              text: root.tr("create.title")
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              font.bold: true
+            }
+
+            Dropdown {
+              id: vaultDropdown
+              width: parent.width
+              label: root.tr("create.vault")
+              options: pass.vaults
+              value: root.createVaultValue
+              foreground: root.foreground
+              fontFamily: root.fontFamily
+              onChanged: function(v) { root.createVaultValue = v }
+            }
+
+            TextField {
+              id: createTitleField
+              width: parent.width
+              placeholderText: root.tr("create.titleField")
+              foreground: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              Keys.onReturnPressed: root.submitCreateForm()
+              Keys.onEnterPressed: root.submitCreateForm()
+              Keys.onEscapePressed: root.closeCreatePopup()
+            }
+
+            TextField {
+              id: createUsernameField
+              width: parent.width
+              placeholderText: root.tr("create.username")
+              foreground: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              Keys.onReturnPressed: root.submitCreateForm()
+              Keys.onEnterPressed: root.submitCreateForm()
+              Keys.onEscapePressed: root.closeCreatePopup()
+            }
+
+            Row {
+              width: parent.width
+              spacing: Style.space(8)
+
+              TextField {
+                id: createPasswordField
+                visible: !root.generatePassword
+                width: parent.width - generateBtn.width - parent.spacing
+                placeholderText: root.tr("create.password")
+                foreground: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                password: true
+                Keys.onReturnPressed: root.submitCreateForm()
+                Keys.onEnterPressed: root.submitCreateForm()
+                Keys.onEscapePressed: root.closeCreatePopup()
+              }
+
+              Text {
+                visible: root.generatePassword
+                width: parent.width - generateBtn.width - parent.spacing
+                text: root.tr("create.generating")
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                anchors.verticalCenter: parent.verticalCenter
+                wrapMode: Text.WordWrap
+              }
+
+              Button {
+                id: generateBtn
+                text: root.tr("create.generate")
+                selected: root.generatePassword
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.caption
+                bordered: true
+                anchors.verticalCenter: parent.verticalCenter
+                onClicked: root.generatePassword = !root.generatePassword
+              }
+            }
+
+            Text {
+              visible: pass.createError !== ""
+              width: parent.width
+              text: pass.createError
+              color: root.urgent
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            Text {
+              visible: pass.createError === "" && pass.vaults.length === 0
+              width: parent.width
+              text: root.tr("create.vaultHint")
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            Row {
+              width: parent.width
+              layoutDirection: Qt.RightToLeft
+              spacing: Style.space(8)
+
+              Button {
+                text: pass.createRunning ? root.tr("create.creating") : root.tr("create.confirm")
+                enabled: !pass.createRunning
+                         && root.createVaultValue !== ""
+                         && createTitleField.text.trim() !== ""
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                bordered: true
+                onClicked: root.submitCreateForm()
+              }
+
+              Button {
+                text: root.tr("create.cancel")
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.bodySmall
+                bordered: true
+                onClicked: root.closeCreatePopup()
+              }
+            }
           }
         }
       }

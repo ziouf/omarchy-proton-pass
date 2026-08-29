@@ -21,6 +21,7 @@ var catalogs = {
     "action.unlock": "Unlock",
     "action.login": "Sign in",
     "action.refresh": "Refresh",
+    "header.newSecret": "New secret",
 
     // Navigation
     "nav.vaults": "Vaults",
@@ -57,8 +58,23 @@ var catalogs = {
     "error.detailRead": "Cannot read item — locked session or inaccessible item.",
     "error.detailParse": "Unreadable pass-cli response.",
     "error.actionFailed": "Action failed",
+    "error.createFailed": "Creation failed (exit code %1)",
     "totp.currentHint": "(current code on copy)",
     "field.extraFallback": "Field",
+
+    // Create-secret popup
+    "create.title": "New secret",
+    "create.vault": "Vault",
+    "create.titleField": "Title",
+    "create.username": "Username (optional)",
+    "create.password": "Password",
+    "create.generate": "Generate",
+    "create.generating": "A random password will be generated.",
+    "create.cancel": "Cancel",
+    "create.confirm": "Create",
+    "create.creating": "Creating…",
+    "create.vaultHint": "Vault list is still loading.",
+    "notify.created": "Secret \"%1\" created",
 
     // Field labels shown in the item detail view
     "field.email": "Email",
@@ -114,6 +130,7 @@ var catalogs = {
     "action.unlock": "解锁",
     "action.login": "登录",
     "action.refresh": "刷新",
+    "header.newSecret": "新建密钥",
 
     // Navigation
     "nav.vaults": "保管库",
@@ -150,8 +167,23 @@ var catalogs = {
     "error.detailRead": "无法读取项目 — 会话已锁定或项目不可访问。",
     "error.detailParse": "pass-cli 返回内容无法解析。",
     "error.actionFailed": "操作失败",
+    "error.createFailed": "创建失败（代码 %1）",
     "totp.currentHint": "（复制时获取当前验证码）",
     "field.extraFallback": "字段",
+
+    // Create-secret popup
+    "create.title": "新建密钥",
+    "create.vault": "保管库",
+    "create.titleField": "标题",
+    "create.username": "用户名（可选）",
+    "create.password": "密码",
+    "create.generate": "生成",
+    "create.generating": "将生成随机密码。",
+    "create.cancel": "取消",
+    "create.confirm": "创建",
+    "create.creating": "创建中…",
+    "create.vaultHint": "保管库列表正在加载。",
+    "notify.created": "密钥“%1”已创建",
 
     // Field labels shown in the item detail view
     "field.email": "邮箱",
@@ -205,6 +237,7 @@ var catalogs = {
     "action.unlock": "Déverrouiller",
     "action.login": "Connexion",
     "action.refresh": "Actualiser",
+    "header.newSecret": "Nouveau secret",
 
     "nav.vaults": "Coffres",
     "vault.all": "Tous les coffres",
@@ -237,8 +270,22 @@ var catalogs = {
     "error.detailRead": "Lecture impossible — session verrouillée ou élément inaccessible.",
     "error.detailParse": "Réponse illisible de pass-cli.",
     "error.actionFailed": "Échec de l'action",
+    "error.createFailed": "Échec de la création (code %1)",
     "totp.currentHint": "(code actuel à la copie)",
     "field.extraFallback": "Champ",
+
+    "create.title": "Nouveau secret",
+    "create.vault": "Coffre",
+    "create.titleField": "Titre",
+    "create.username": "Identifiant (optionnel)",
+    "create.password": "Mot de passe",
+    "create.generate": "Générer",
+    "create.generating": "Un mot de passe aléatoire sera généré.",
+    "create.cancel": "Annuler",
+    "create.confirm": "Créer",
+    "create.creating": "Création…",
+    "create.vaultHint": "La liste des coffres est encore en chargement.",
+    "notify.created": "Secret « %1 » créé",
 
     // Field labels shown in the item detail view
     "field.email": "E-mail",
