@@ -599,12 +599,15 @@ Panel {
       }
 
       // ---------------------------------------------------- create popup
+      // Modal card over the panel content. No dim overlay: a translucent
+      // fill on the keyboard-panel layer breaks text rendering shell-wide
+      // (every Text on the layer stops painting while it is visible).
       Rectangle {
         id: createOverlay
         visible: root.createOpen
         anchors.fill: parent
         z: 50
-        color: Util.alpha(Color.foreground, 0.30)
+        color: "transparent"
 
         // Click outside the card cancels.
         MouseArea {
@@ -639,7 +642,7 @@ Panel {
             }
 
             Dropdown {
-              id: vaultDropdown
+
               width: parent.width
               label: root.tr("create.vault")
               options: pass.vaults
