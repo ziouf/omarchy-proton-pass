@@ -347,7 +347,12 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(440))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight, Style.space(560))
+    // While the create popup is open the panel grows to fit the card, so a
+    // short list view never clips the form.
+    contentHeight: panel.fittedContentHeight(
+      root.createOpen ? Math.max(column.implicitHeight, createCard.height + Style.space(16))
+                      : column.implicitHeight,
+      Style.space(560))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -611,12 +616,16 @@ Panel {
           id: createCard
           anchors.centerIn: parent
           width: Math.min(parent.width - Style.space(24), Style.space(320))
+          // The Column inside uses anchors.fill, so it cannot drive the
+          // card's size: the height must come from the content instead.
+          height: cardColumn.implicitHeight + Style.space(32)
           radius: Style.cornerRadius
           color: Color.popups.background
           border.color: Color.popups.border
           border.width: 1
 
           Column {
+            id: cardColumn
             anchors.fill: parent
             anchors.margins: Style.space(16)
             spacing: Style.space(10)
