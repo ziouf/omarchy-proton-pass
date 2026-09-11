@@ -85,7 +85,10 @@ Panel {
     for (var i = 0; i < pass.items.length; i++) {
       var item = pass.items[i]
       if (currentVault !== "" && item.vault !== currentVault) continue
-      if (q !== "" && item.title.toLowerCase().indexOf(q) < 0) continue
+      if (q !== ""
+          && item.title.toLowerCase().indexOf(q) < 0
+          && String(item.vault || "").toLowerCase().indexOf(q) < 0
+          && typeLabel(item.itemType).toLowerCase().indexOf(q) < 0) continue
       out.push(item)
     }
     return out
@@ -231,7 +234,9 @@ Panel {
   }
 
   function statusIcon() {
-    // Key glyph (FA key); dimmed when logged out.
+    // Key glyph (FA key); locked sessions show a padlock; dimming is
+    // reserved for logged-out (handled by the icon's dimmed binding).
+    if (pass.status === "locked") return "\uF023"
     return "\uF084"
   }
 
@@ -454,6 +459,15 @@ Panel {
               }
 
               PanelActionButton {
+                iconText: "\uF09C"                   // unlock = unlock session
+                visible: pass.status === "locked"
+                foreground: root.dim
+                hoverColor: root.foreground
+                tooltipText: root.tr("action.unlock")
+                onClicked: pass.unlock()
+              }
+
+              PanelActionButton {
                 iconText: "\uF023"                   // lock = sign in
                 visible: pass.status === "logged-out"
                 foreground: root.dim
@@ -582,8 +596,8 @@ Panel {
             visible: root.view === "items" && root.hiddenItemCount > 0
             width: parent.width
             topPadding: Style.space(4)
-            text: trFmt("items.hiddenCount", pass.items.length - root.visibleItems.length,
-                        pass.items.length)
+            text: trFmt("items.hiddenCount", root.visibleItems.length,
+                        root.filteredAll.length)
             color: root.dim
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
@@ -659,6 +673,7 @@ Panel {
               foreground: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
+              activeFocusOnTab: true
               Keys.onReturnPressed: root.submitCreateForm()
               Keys.onEnterPressed: root.submitCreateForm()
               Keys.onEscapePressed: root.closeCreatePopup()
@@ -671,6 +686,7 @@ Panel {
               foreground: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
+              activeFocusOnTab: true
               Keys.onReturnPressed: root.submitCreateForm()
               Keys.onEnterPressed: root.submitCreateForm()
               Keys.onEscapePressed: root.closeCreatePopup()
@@ -684,6 +700,7 @@ Panel {
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
               password: true
+              activeFocusOnTab: true
               Keys.onReturnPressed: root.submitCreateForm()
               Keys.onEnterPressed: root.submitCreateForm()
               Keys.onEscapePressed: root.closeCreatePopup()
@@ -800,9 +817,20 @@ Panel {
     property var item: null
     property bool selected: false
     property bool showVault: false
+    // Optimistic copy feedback: the check shows on click; failures already
+    // raise a critical notification through the action pipeline.
+    property bool justCopied: false
 
     signal opened()
     signal copiedField(string field)
+
+    Timer {
+      id: copyFlash
+      interval: 1500
+      onTriggered: row.justCopied = false
+    }
+
+    function flashCopied() { justCopied = true; copyFlash.restart() }
 
     implicitHeight: typeCol.implicitHeight + Style.space(10)
     radius: Style.cornerRadius
@@ -814,14 +842,24 @@ Panel {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onClicked: row.opened()
+      acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
+      onClicked: function(mouse) {
+        // Quick-copy shortcuts on login rows, like the desktop app.
+        if (row.item && row.item.itemType === "login"
+            && (mouse.button === Qt.RightButton || mouse.button === Qt.MiddleButton)) {
+          row.flashCopied()
+          row.copiedField(mouse.button === Qt.MiddleButton ? "password" : "username")
+          return
+        }
+        row.opened()
+      }
     }
 
     Text {
 
         textFormat: Text.PlainText
       id: typeIconText
-      text: root.typeIcon(row.item ? row.item.itemType : "")
+      text: row.justCopied ? "\uF00C" : root.typeIcon(row.item ? row.item.itemType : "")
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.body
@@ -883,7 +921,7 @@ Panel {
         hoverColor: root.foreground
         tooltipText: root.tr("copy.username")
         visible: !!row.item && row.item.itemType === "login"
-        onClicked: row.copiedField("username")
+        onClicked: { row.flashCopied(); row.copiedField("username") }
       }
 
       PanelActionButton {
@@ -892,7 +930,7 @@ Panel {
         hoverColor: root.foreground
         tooltipText: root.tr("copy.password")
         visible: !!row.item && row.item.itemType === "login"
-        onClicked: row.copiedField("password")
+        onClicked: { row.flashCopied(); row.copiedField("password") }
       }
 
       PanelActionButton {
@@ -903,7 +941,7 @@ Panel {
         // Hidden once pass-cli confirmed the item carries no TOTP.
         visible: !!row.item && row.item.itemType === "login"
                  && pass.showTotp && row.item.hasTotp !== false
-        onClicked: row.copiedField("totp")
+        onClicked: { row.flashCopied(); row.copiedField("totp") }
       }
     }
 
@@ -989,7 +1027,16 @@ Panel {
   component FieldRow: Rectangle {
     id: frow
     property var field: null
+    property bool justCopied: false
     signal copied()
+
+    Timer {
+      id: fcopyFlash
+      interval: 1500
+      onTriggered: frow.justCopied = false
+    }
+
+    function flashCopied() { justCopied = true; fcopyFlash.restart() }
 
     implicitHeight: fieldCol.implicitHeight + Style.space(12)
     radius: Style.cornerRadius
@@ -999,7 +1046,7 @@ Panel {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onClicked: frow.copied()
+      onClicked: { frow.flashCopied(); frow.copied() }
     }
 
     Column {
@@ -1057,7 +1104,7 @@ Panel {
 
     PanelActionButton {
       id: copyBtn
-      iconText: "\uF0C5"                         // copy
+      iconText: frow.justCopied ? "\uF00C" : "\uF0C5"   // check / copy
       anchors.right: parent.right
       anchors.rightMargin: Style.space(10)
       anchors.verticalCenter: parent.verticalCenter
