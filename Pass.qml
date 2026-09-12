@@ -79,19 +79,36 @@ Panel {
     return n
   }
 
+  // Match scoring for the filter: word-start beats prefix beats plain
+  // substring beats vault/type-only match. Same-score ties keep model order.
+  function matchScore(text, q) {
+    var s = String(text || "").toLowerCase()
+    if (q === "" || s === "") return 0
+    var i = s.indexOf(q)
+    if (i < 0) return 0
+    if (i === 0) return 3
+    if (" -_.@:/+-".indexOf(s.charAt(i - 1)) >= 0) return 2
+    return 1
+  }
+
   function filteredItems() {
     var q = query.trim().toLowerCase()
     var out = []
     for (var i = 0; i < pass.items.length; i++) {
       var item = pass.items[i]
       if (currentVault !== "" && item.vault !== currentVault) continue
-      if (q !== ""
-          && item.title.toLowerCase().indexOf(q) < 0
-          && String(item.vault || "").toLowerCase().indexOf(q) < 0
-          && typeLabel(item.itemType).toLowerCase().indexOf(q) < 0) continue
-      out.push(item)
+      var score = 0
+      if (q !== "") {
+        score = matchScore(item.title, q)
+        if (score === 0) score = Math.max(matchScore(item.vault, q),
+                                          matchScore(typeLabel(item.itemType), q))
+        if (score === 0) continue
+      }
+      out.push({ item: item, score: score })
     }
-    return out
+    if (q !== "")
+      out.sort(function(a, b) { return b.score - a.score })
+    return out.map(function(r) { return r.item })
   }
 
   readonly property int maxRenderedItems: 120
@@ -114,7 +131,12 @@ Panel {
   onVisibleItemsChanged: clampIndex()
   onVaultRowsChanged: clampIndex()
   onViewChanged: selectedIndex = 0
-  onQueryChanged: selectedIndex = 0
+  // Typing a filter arms the cursor on the top match: the launcher reflex,
+  // type then Enter, without touching the arrows first.
+  onQueryChanged: {
+    selectedIndex = 0
+    cursorActive = query.trim() !== ""
+  }
 
   function moveCursor(delta) {
     cursorActive = true
@@ -185,16 +207,32 @@ Panel {
     else close()
   }
 
-  function breadcrumb() {
-    // Root level carries the brand key glyph (bar font is icon-capable).
-    if (view === "vaults") return "\uF084  " + tr("nav.brand")
-    if (view === "items") return (currentVault === "" ? tr("vault.all") : currentVault)
-    var title = currentItem ? currentItem.title : ""
-    return (currentVault === "" ? tr("vault.allShort") : currentVault) + " › " + title
+  function heroTitle() {
+    if (view === "vaults") return tr("nav.brand")
+    if (view === "items") return currentVault === "" ? tr("vault.all") : currentVault
+    return currentItem ? currentItem.title : ""
+  }
+
+  // Meta line under the hero: the account at the root, the containing vault
+  // on a detail view.
+  function heroMeta() {
+    if (view === "vaults") return pass.account !== "" ? pass.account : root.statusLabel()
+    if (view === "detail") return currentVault === "" ? tr("vault.all") : currentVault
+    return ""
   }
 
   function copyFor(item, field) {
     pass.copyField(item, field)
+  }
+
+  // Shift+Enter on the highlighted row: copy its password without entering
+  // the detail view (item view only; logins only).
+  function quickCopyPassword() {
+    if (view !== "items") return
+    clampIndex()
+    if (selectedIndex < 0) return
+    var item = visibleItems[selectedIndex]
+    if (item && item.itemType === "login") copyFor(item, "password")
   }
 
   function refreshNow(force) {
@@ -269,6 +307,7 @@ Panel {
     return key !== undefined ? tr("type." + key) : String(itemType || tr("type.other"))
   }
 
+  // Opening from the keyboard should mean typing right away.
   onOpenedChanged: if (opened) {
     view = "vaults"
     currentVault = ""
@@ -369,8 +408,8 @@ Panel {
       onMoveRequested: function(dx, dy) {
         if (dy !== 0) root.moveCursor(dy > 0 ? 1 : -1)
       }
-      Keys.onReturnPressed: root.activateRow(-1)
-      Keys.onEnterPressed: root.activateRow(-1)
+      Keys.onReturnPressed: if (event.modifiers & Qt.ShiftModifier) root.quickCopyPassword(); else root.activateRow(-1)
+      Keys.onEnterPressed: if (event.modifiers & Qt.ShiftModifier) root.quickCopyPassword(); else root.activateRow(-1)
       Keys.onBackPressed: root.goBack()
 
       Flickable {
@@ -404,78 +443,14 @@ Panel {
               onClicked: root.goBack()
             }
 
-            Column {
-              width: Math.max(0, parent.width - backButton.width - headerActions.width - parent.spacing * 2)
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
-
-              Text {
-
-                  textFormat: Text.PlainText
-                width: parent.width
-                text: root.breadcrumb()
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.heading
-                font.bold: true
-                elide: Text.ElideMiddle
-              }
-
-              Text {
-
-                  textFormat: Text.PlainText
-                visible: root.view === "vaults"
-                width: parent.width
-                text: pass.account !== "" ? pass.account : root.statusLabel()
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                elide: Text.ElideRight
-              }
-            }
-
-            // Header shortcuts, replacing the former status/actions row:
-            // creation and resync while a session exists, sign-in when not.
-            Row {
-              id: headerActions
-              spacing: Style.space(4)
-              anchors.verticalCenter: parent.verticalCenter
-
-              PanelActionButton {
-                iconText: "\uF067"                   // plus = new secret
-                visible: pass.status !== "logged-out"
-                foreground: root.dim
-                hoverColor: root.foreground
-                tooltipText: root.tr("header.newSecret")
-                onClicked: root.openCreatePopup()
-              }
-
-              PanelActionButton {
-                iconText: "\uF021"                   // refresh = force resync
-                visible: pass.status !== "logged-out"
-                foreground: root.dim
-                hoverColor: root.foreground
-                tooltipText: root.tr("action.refresh")
-                onClicked: root.refreshNow(true)
-              }
-
-              PanelActionButton {
-                iconText: "\uF09C"                   // unlock = unlock session
-                visible: pass.status === "locked"
-                foreground: root.dim
-                hoverColor: root.foreground
-                tooltipText: root.tr("action.unlock")
-                onClicked: pass.unlock()
-              }
-
-              PanelActionButton {
-                iconText: "\uF023"                   // lock = sign in
-                visible: pass.status === "logged-out"
-                foreground: root.dim
-                hoverColor: root.foreground
-                tooltipText: root.tr("action.login")
-                onClicked: pass.login()
-              }
+            PanelHero {
+              width: Math.max(0, parent.width - backButton.width - parent.spacing)
+              iconComponent: HeroGlyph
+              title: root.heroTitle()
+              meta: root.heroMeta()
+              trailingControl: HeaderActions
+              foreground: root.foreground
+              fontFamily: root.fontFamily
             }
           }
 
@@ -512,8 +487,8 @@ Panel {
             }
             Keys.onDownPressed: root.moveCursor(1)
             Keys.onUpPressed: root.moveCursor(-1)
-            Keys.onReturnPressed: root.activateRow(-1)
-            Keys.onEnterPressed: root.activateRow(-1)
+            Keys.onReturnPressed: if (event.modifiers & Qt.ShiftModifier) root.quickCopyPassword(); else root.activateRow(-1)
+            Keys.onEnterPressed: if (event.modifiers & Qt.ShiftModifier) root.quickCopyPassword(); else root.activateRow(-1)
             Keys.onEscapePressed: root.close()
             // Backspace on an empty filter walks back up one level.
             Keys.onBackPressed: if (text === "") root.goBack()
@@ -610,6 +585,19 @@ Panel {
             visible: root.view === "detail"
             width: column.width
           }
+
+          // Keyboard hints, launcher style, on the search level.
+          Text {
+            textFormat: Text.PlainText
+            visible: root.view === "items"
+            width: parent.width
+            topPadding: Style.space(6)
+            text: root.tr("hints.itemsLine")
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            horizontalAlignment: Text.AlignHCenter
+          }
         }
       }
 
@@ -630,7 +618,7 @@ Panel {
           onClicked: root.closeCreatePopup()
         }
 
-        Rectangle {
+        BorderSurface {
           id: createCard
           anchors.centerIn: parent
           width: Math.min(parent.width - Style.space(24), Style.space(320))
@@ -639,8 +627,9 @@ Panel {
           height: cardColumn.implicitHeight + Style.space(32)
           radius: Style.cornerRadius
           color: Color.popups.background
-          border.color: Color.popups.border
-          border.width: 1
+          borderSpec: Border.localOrSurfaceSpec("popups", "border",
+                                                Color.popups.border,
+                                                Color.popups.border, 1)
 
           Column {
             id: cardColumn
@@ -750,6 +739,58 @@ Panel {
   }
 
   // ------------------------------------------------------------ components
+
+  component HeroGlyph: Text {
+    textFormat: Text.PlainText
+    text: root.view === "vaults" ? "\uF084"
+        : root.view === "items" ? "\uF114"
+        : root.typeIcon(root.currentItem ? root.currentItem.itemType : "")
+    color: root.dim
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.display
+  }
+
+  // Header shortcuts, loaded by the hero's trailing slot: creation and
+  // resync while a session exists, sign-in when not.
+  component HeaderActions: Row {
+    spacing: Style.space(4)
+
+    PanelActionButton {
+      iconText: "\uF067"                   // plus = new secret
+      visible: pass.status !== "logged-out"
+      foreground: root.dim
+      hoverColor: root.foreground
+      tooltipText: root.tr("header.newSecret")
+      onClicked: root.openCreatePopup()
+    }
+
+    PanelActionButton {
+      iconText: "\uF021"                   // refresh = force resync
+      visible: pass.status !== "logged-out"
+      foreground: root.dim
+      hoverColor: root.foreground
+      tooltipText: root.tr("action.refresh")
+      onClicked: root.refreshNow(true)
+    }
+
+    PanelActionButton {
+      iconText: "\uF09C"                   // unlock = unlock session
+      visible: pass.status === "locked"
+      foreground: root.dim
+      hoverColor: root.foreground
+      tooltipText: root.tr("action.unlock")
+      onClicked: pass.unlock()
+    }
+
+    PanelActionButton {
+      iconText: "\uF023"                   // lock = sign in
+      visible: pass.status === "logged-out"
+      foreground: root.dim
+      hoverColor: root.foreground
+      tooltipText: root.tr("action.login")
+      onClicked: pass.login()
+    }
+  }
 
   component VaultRow: Rectangle {
     id: vrow
