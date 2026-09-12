@@ -540,7 +540,8 @@ Panel {
 
               PanelActionButton {
                 iconText: "\uF067"                   // plus = new secret
-                visible: pass.status !== "logged-out"
+                visible: pass.status !== "logged-out" && root.view !== "detail"
+                size: Style.space(28)
                 foreground: root.dim
                 hoverColor: root.foreground
                 tooltipText: root.tr("header.newSecret")
@@ -549,8 +550,9 @@ Panel {
 
               PanelActionButton {
                 iconText: "\uF021"                   // refresh
-                visible: pass.status !== "logged-out"
+                visible: pass.status !== "logged-out" && root.view !== "detail"
                 enabled: !pass.itemsLoading
+                size: Style.space(28)
                 foreground: root.dim
                 hoverColor: root.foreground
                 tooltipText: root.tr("action.refresh")
@@ -560,6 +562,7 @@ Panel {
               PanelActionButton {
                 iconText: "\uF09C"                   // unlock
                 visible: pass.status === "locked"
+                size: Style.space(28)
                 foreground: root.dim
                 hoverColor: root.foreground
                 tooltipText: root.tr("action.unlock")
@@ -569,6 +572,7 @@ Panel {
               PanelActionButton {
                 iconText: "\uF023"                   // login
                 visible: pass.status === "logged-out"
+                size: Style.space(28)
                 foreground: root.dim
                 hoverColor: root.foreground
                 tooltipText: root.tr("action.login")
