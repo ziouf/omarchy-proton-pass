@@ -443,26 +443,21 @@ Panel {
               onClicked: root.goBack()
             }
 
-            // Scope bridge: inside PanelHero's iconComponent/trailingControl,
-            // `root` resolves to PanelHero itself (not this Panel) — expose
-            // what the hero slots need via `hero`, like first-party panels.
+            // Scope bridge: inside PanelHero's iconComponent, `root` resolves
+            // to PanelHero itself (not this Panel) — expose what the hero
+            // slot needs via `hero`, like first-party panels.
             Item {
               id: hero
               visible: false
               readonly property bool isVaults: root.view === "vaults"
               readonly property bool isItems: root.view === "items"
               readonly property var currentItem: root.currentItem
-              readonly property var passObj: pass
-              readonly property bool itemsLoading: pass.itemsLoading
               readonly property color foreground: root.foreground
               readonly property color dim: root.dim
               readonly property string fontFamily: root.fontFamily
               readonly property string heroTitleText: root.heroTitle()
               readonly property string heroMetaText: root.heroMeta()
-              function tr(key) { return root.tr(key) }
               function typeIcon(t) { return root.typeIcon(t) }
-              function openCreatePopup() { root.openCreatePopup() }
-              function refreshNow(force) { root.refreshNow(force) }
             }
 
             PanelHero {
@@ -480,91 +475,106 @@ Panel {
               }
               title: hero.heroTitleText
               meta: hero.heroMetaText
-              trailingControl: Component {
-                Row {
-                  spacing: Style.space(8)
-
-                  PanelActionButton {
-                    iconText: "\uF067"
-                    visible: hero.passObj.status !== "logged-out"
-                    foreground: hero.dim
-                    hoverColor: hero.foreground
-                    tooltipText: hero.tr("header.newSecret")
-                    onClicked: hero.openCreatePopup()
-                  }
-
-                  PanelActionButton {
-                    iconText: "\uF021"
-                    visible: hero.passObj.status !== "logged-out"
-                    enabled: !hero.itemsLoading
-                    foreground: hero.dim
-                    hoverColor: hero.foreground
-                    tooltipText: hero.tr("action.refresh")
-                    onClicked: hero.refreshNow(true)
-                  }
-
-                  PanelActionButton {
-                    iconText: "\uF09C"
-                    visible: hero.passObj.status === "locked"
-                    foreground: hero.dim
-                    hoverColor: hero.foreground
-                    tooltipText: hero.tr("action.unlock")
-                    onClicked: hero.passObj.unlock()
-                  }
-
-                  PanelActionButton {
-                    iconText: "\uF023"
-                    visible: hero.passObj.status === "logged-out"
-                    foreground: hero.dim
-                    hoverColor: hero.foreground
-                    tooltipText: hero.tr("action.login")
-                    onClicked: hero.passObj.login()
-                  }
-                }
-              }
               foreground: hero.foreground
               fontFamily: hero.fontFamily
             }
           }
 
-          // ------------------------------------------------------ search
-          TextField {
-            id: searchField
-            visible: root.view !== "detail"
+          // --------------------------------------------- search toolbar
+          // Actions live next to the filter, not in PanelHero.trailingControl:
+          // the hero centers its trailing slot on title+meta, which left the
+          // icons floating on the interline. Against this single-line row the
+          // 22px buttons center exactly.
+          Item {
             width: parent.width
-            placeholderText: root.view === "items"
-                             ? trFmt("search.filterIn", currentVault === "" ? tr("vault.all") : currentVault)
-                             : tr("search.vaults")
-            foreground: root.foreground
-            // Reserve room for the reset button so long queries stay readable.
-            rightPadding: horizontalPadding + Style.space(2)
-                          + (resetButton.visible ? resetButton.width + Style.space(4) : 0)
-            onTextChanged: root.query = text
+            implicitHeight: Math.max(searchField.visible ? searchField.implicitHeight : 0,
+                                     actionButtons.height)
 
-            PanelActionButton {
-              id: resetButton
-              anchors.right: parent.right
-              anchors.rightMargin: Style.space(4)
+            TextField {
+              id: searchField
+              visible: root.view !== "detail"
+              anchors.left: parent.left
+              anchors.right: actionButtons.left
+              anchors.rightMargin: Style.space(8)
               anchors.verticalCenter: parent.verticalCenter
-              iconText: "\uF00D"                   // times
-              foreground: root.dim
-              hoverColor: root.foreground
-              tooltipText: root.tr("search.reset")
-              visible: searchField.text !== ""
-              onClicked: {
-                searchField.text = ""
-                root.query = ""
-                root.selectedIndex = 0
-                searchField.forceActiveFocus()
+              placeholderText: root.view === "items"
+                               ? trFmt("search.filterIn", currentVault === "" ? tr("vault.all") : currentVault)
+                               : tr("search.vaults")
+              foreground: root.foreground
+              // Reserve room for the reset button so long queries stay readable.
+              rightPadding: horizontalPadding + Style.space(2)
+                            + (resetButton.visible ? resetButton.width + Style.space(4) : 0)
+              onTextChanged: root.query = text
+
+              PanelActionButton {
+                id: resetButton
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(4)
+                anchors.verticalCenter: parent.verticalCenter
+                iconText: "\uF00D"                   // times
+                foreground: root.dim
+                hoverColor: root.foreground
+                tooltipText: root.tr("search.reset")
+                visible: searchField.text !== ""
+                onClicked: {
+                  searchField.text = ""
+                  root.query = ""
+                  root.selectedIndex = 0
+                  searchField.forceActiveFocus()
+                }
+              }
+              Keys.onDownPressed: root.moveCursor(1)
+              Keys.onUpPressed: root.moveCursor(-1)
+              Keys.onReturnPressed: if (event.modifiers & Qt.ShiftModifier) root.quickCopyPassword(); else root.activateRow(-1)
+              Keys.onEnterPressed: if (event.modifiers & Qt.ShiftModifier) root.quickCopyPassword(); else root.activateRow(-1)
+              Keys.onEscapePressed: root.close()
+              // Backspace on an empty filter walks back up one level.
+              Keys.onBackPressed: if (text === "") root.goBack()
+            }
+
+            Row {
+              id: actionButtons
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(8)
+
+              PanelActionButton {
+                iconText: "\uF067"                   // plus = new secret
+                visible: pass.status !== "logged-out"
+                foreground: root.dim
+                hoverColor: root.foreground
+                tooltipText: root.tr("header.newSecret")
+                onClicked: root.openCreatePopup()
+              }
+
+              PanelActionButton {
+                iconText: "\uF021"                   // refresh
+                visible: pass.status !== "logged-out"
+                enabled: !pass.itemsLoading
+                foreground: root.dim
+                hoverColor: root.foreground
+                tooltipText: root.tr("action.refresh")
+                onClicked: root.refreshNow(true)
+              }
+
+              PanelActionButton {
+                iconText: "\uF09C"                   // unlock
+                visible: pass.status === "locked"
+                foreground: root.dim
+                hoverColor: root.foreground
+                tooltipText: root.tr("action.unlock")
+                onClicked: pass.unlock()
+              }
+
+              PanelActionButton {
+                iconText: "\uF023"                   // login
+                visible: pass.status === "logged-out"
+                foreground: root.dim
+                hoverColor: root.foreground
+                tooltipText: root.tr("action.login")
+                onClicked: pass.login()
               }
             }
-            Keys.onDownPressed: root.moveCursor(1)
-            Keys.onUpPressed: root.moveCursor(-1)
-            Keys.onReturnPressed: if (event.modifiers & Qt.ShiftModifier) root.quickCopyPassword(); else root.activateRow(-1)
-            Keys.onEnterPressed: if (event.modifiers & Qt.ShiftModifier) root.quickCopyPassword(); else root.activateRow(-1)
-            Keys.onEscapePressed: root.close()
-            // Backspace on an empty filter walks back up one level.
-            Keys.onBackPressed: if (text === "") root.goBack()
           }
 
           // -------------------------------------------------- vault list
