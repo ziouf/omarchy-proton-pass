@@ -453,6 +453,7 @@ Panel {
               readonly property bool isItems: root.view === "items"
               readonly property var currentItem: root.currentItem
               readonly property var passObj: pass
+              readonly property bool itemsLoading: pass.itemsLoading
               readonly property color foreground: root.foreground
               readonly property color dim: root.dim
               readonly property string fontFamily: root.fontFamily
@@ -465,7 +466,7 @@ Panel {
             }
 
             PanelHero {
-              width: Math.max(0, parent.width - backButton.width - parent.spacing)
+              width: Math.max(0, parent.width - (backButton.visible ? backButton.width + parent.spacing : 0))
               iconComponent: Component {
                 Text {
                   textFormat: Text.PlainText
@@ -481,7 +482,7 @@ Panel {
               meta: hero.heroMetaText
               trailingControl: Component {
                 Row {
-                  spacing: Style.space(4)
+                  spacing: Style.space(8)
 
                   PanelActionButton {
                     iconText: "\uF067"
@@ -495,6 +496,7 @@ Panel {
                   PanelActionButton {
                     iconText: "\uF021"
                     visible: hero.passObj.status !== "logged-out"
+                    enabled: !hero.itemsLoading
                     foreground: hero.dim
                     hoverColor: hero.foreground
                     tooltipText: hero.tr("action.refresh")
