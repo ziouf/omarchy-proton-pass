@@ -24,7 +24,7 @@ var catalogs = {
     "header.newSecret": "New secret",
 
     // Navigation
-    "nav.vaults": "Vaults",
+    "nav.brand": "Proton Pass",
     "vault.all": "All vaults",
     "vault.allShort": "All",
     "search.vaults": "Search vaults…",
@@ -129,7 +129,7 @@ var catalogs = {
     "header.newSecret": "新建密钥",
 
     // Navigation
-    "nav.vaults": "保管库",
+    "nav.brand": "Proton Pass",
     "vault.all": "所有保管库",
     "vault.allShort": "全部",
     "search.vaults": "搜索保管库…",
@@ -231,7 +231,7 @@ var catalogs = {
     "action.refresh": "Actualiser",
     "header.newSecret": "Nouveau secret",
 
-    "nav.vaults": "Coffres",
+    "nav.brand": "Proton Pass",
     "vault.all": "Tous les coffres",
     "vault.allShort": "Tous",
     "search.vaults": "Rechercher un coffre…",

@@ -186,7 +186,8 @@ Panel {
   }
 
   function breadcrumb() {
-    if (view === "vaults") return tr("nav.vaults")
+    // Root level carries the brand key glyph (bar font is icon-capable).
+    if (view === "vaults") return "\uF084  " + tr("nav.brand")
     if (view === "items") return (currentVault === "" ? tr("vault.all") : currentVault)
     var title = currentItem ? currentItem.title : ""
     return (currentVault === "" ? tr("vault.allShort") : currentVault) + " › " + title
