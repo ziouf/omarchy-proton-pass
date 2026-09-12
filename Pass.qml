@@ -436,21 +436,92 @@ Panel {
             Button {
               id: backButton
               visible: root.view !== "vaults"
-              text: "\uF104"                     // angle-left
+              text: "\uF104"
               foreground: root.foreground
               fontFamily: root.fontFamily
               fontSize: Style.font.body
               onClicked: root.goBack()
             }
 
+            // Scope bridge: inside PanelHero's iconComponent/trailingControl,
+            // `root` resolves to PanelHero itself (not this Panel) — expose
+            // what the hero slots need via `hero`, like first-party panels.
+            Item {
+              id: hero
+              visible: false
+              readonly property bool isVaults: root.view === "vaults"
+              readonly property bool isItems: root.view === "items"
+              readonly property var currentItem: root.currentItem
+              readonly property var passObj: pass
+              readonly property color foreground: root.foreground
+              readonly property color dim: root.dim
+              readonly property string fontFamily: root.fontFamily
+              readonly property string heroTitleText: root.heroTitle()
+              readonly property string heroMetaText: root.heroMeta()
+              function tr(key) { return root.tr(key) }
+              function typeIcon(t) { return root.typeIcon(t) }
+              function openCreatePopup() { root.openCreatePopup() }
+              function refreshNow(force) { root.refreshNow(force) }
+            }
+
             PanelHero {
               width: Math.max(0, parent.width - backButton.width - parent.spacing)
-              iconComponent: HeroGlyph
-              title: root.heroTitle()
-              meta: root.heroMeta()
-              trailingControl: HeaderActions
-              foreground: root.foreground
-              fontFamily: root.fontFamily
+              iconComponent: Component {
+                Text {
+                  textFormat: Text.PlainText
+                  text: hero.isVaults ? "\uF084"
+                      : hero.isItems ? "\uF114"
+                      : hero.typeIcon(hero.currentItem ? hero.currentItem.itemType : "")
+                  color: hero.dim
+                  font.family: hero.fontFamily
+                  font.pixelSize: Style.font.display
+                }
+              }
+              title: hero.heroTitleText
+              meta: hero.heroMetaText
+              trailingControl: Component {
+                Row {
+                  spacing: Style.space(4)
+
+                  PanelActionButton {
+                    iconText: "\uF067"
+                    visible: hero.passObj.status !== "logged-out"
+                    foreground: hero.dim
+                    hoverColor: hero.foreground
+                    tooltipText: hero.tr("header.newSecret")
+                    onClicked: hero.openCreatePopup()
+                  }
+
+                  PanelActionButton {
+                    iconText: "\uF021"
+                    visible: hero.passObj.status !== "logged-out"
+                    foreground: hero.dim
+                    hoverColor: hero.foreground
+                    tooltipText: hero.tr("action.refresh")
+                    onClicked: hero.refreshNow(true)
+                  }
+
+                  PanelActionButton {
+                    iconText: "\uF09C"
+                    visible: hero.passObj.status === "locked"
+                    foreground: hero.dim
+                    hoverColor: hero.foreground
+                    tooltipText: hero.tr("action.unlock")
+                    onClicked: hero.passObj.unlock()
+                  }
+
+                  PanelActionButton {
+                    iconText: "\uF023"
+                    visible: hero.passObj.status === "logged-out"
+                    foreground: hero.dim
+                    hoverColor: hero.foreground
+                    tooltipText: hero.tr("action.login")
+                    onClicked: hero.passObj.login()
+                  }
+                }
+              }
+              foreground: hero.foreground
+              fontFamily: hero.fontFamily
             }
           }
 
@@ -738,59 +809,7 @@ Panel {
     }
   }
 
-  // ------------------------------------------------------------ components
-
-  component HeroGlyph: Text {
-    textFormat: Text.PlainText
-    text: root.view === "vaults" ? "\uF084"
-        : root.view === "items" ? "\uF114"
-        : root.typeIcon(root.currentItem ? root.currentItem.itemType : "")
-    color: root.dim
-    font.family: root.fontFamily
-    font.pixelSize: Style.font.display
-  }
-
-  // Header shortcuts, loaded by the hero's trailing slot: creation and
-  // resync while a session exists, sign-in when not.
-  component HeaderActions: Row {
-    spacing: Style.space(4)
-
-    PanelActionButton {
-      iconText: "\uF067"                   // plus = new secret
-      visible: pass.status !== "logged-out"
-      foreground: root.dim
-      hoverColor: root.foreground
-      tooltipText: root.tr("header.newSecret")
-      onClicked: root.openCreatePopup()
-    }
-
-    PanelActionButton {
-      iconText: "\uF021"                   // refresh = force resync
-      visible: pass.status !== "logged-out"
-      foreground: root.dim
-      hoverColor: root.foreground
-      tooltipText: root.tr("action.refresh")
-      onClicked: root.refreshNow(true)
-    }
-
-    PanelActionButton {
-      iconText: "\uF09C"                   // unlock = unlock session
-      visible: pass.status === "locked"
-      foreground: root.dim
-      hoverColor: root.foreground
-      tooltipText: root.tr("action.unlock")
-      onClicked: pass.unlock()
-    }
-
-    PanelActionButton {
-      iconText: "\uF023"                   // lock = sign in
-      visible: pass.status === "logged-out"
-      foreground: root.dim
-      hoverColor: root.foreground
-      tooltipText: root.tr("action.login")
-      onClicked: pass.login()
-    }
-  }
+// ------------------------------------------------------------ components
 
   component VaultRow: Rectangle {
     id: vrow
