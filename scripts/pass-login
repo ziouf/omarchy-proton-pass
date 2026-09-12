@@ -1,0 +1,39 @@
+#!/bin/bash
+# pass-login — web login with automatic browser opening.
+#
+# `pass-cli login` prints a one-time URL to complete authentication in the
+# browser and then waits. This wrapper watches its output, opens the first
+# https:// URL with xdg-open, and keeps the terminal attached so the flow
+# completes. Output stays visible (tee) and stdin stays on the terminal, so
+# `--interactive` logins keep working; when no URL ever appears (or xdg-open
+# is missing) the visible URL remains openable by hand.
+
+set -u
+
+# Keep the encryption key in the Secret Service so sessions survive reboots;
+# the kernel keyring default is wiped at every boot. Respect an explicit override.
+export PROTON_PASS_LINUX_KEYRING="${PROTON_PASS_LINUX_KEYRING:-dbus}"
+
+command -v pass-cli >/dev/null 2>&1 || { echo "pass-login: pass-cli not found" >&2; exit 1; }
+
+log="$(mktemp "${TMPDIR:-/tmp}/proton-pass-login.XXXXXX")"
+trap 'rm -f "$log"' EXIT
+
+# First URL wins; silent when none appears or no opener exists.
+(
+  url="$(timeout 300 grep -m1 -oE 'https?://[^[:space:]"'"'"']+' <(tail -n +1 -F "$log" 2>/dev/null) 2>/dev/null)"
+  if [[ -n "$url" ]] && command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url" >/dev/null 2>&1
+  fi
+) &
+watcher=$!
+
+pass-cli login "$@" 2>&1 | tee "$log"
+rc="${PIPESTATUS[0]}"
+
+# Login is over: reap the watcher instead of leaving it on its timeout.
+pkill -P "$watcher" 2>/dev/null || true
+kill "$watcher" 2>/dev/null || true
+wait "$watcher" 2>/dev/null || true
+
+exit "$rc"

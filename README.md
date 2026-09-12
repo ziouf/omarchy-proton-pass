@@ -78,7 +78,8 @@ omarchy plugin add https://github.com/ziouf/omarchy-proton-pass
 
 The widget appears in the bar (right section by default; move it with
 `omarchy bar move ziouf.proton-pass --section right`). Log in once from the
-panel ("Connexion" button) or directly:
+panel ("Connexion" button — the Proton login page opens in your browser
+automatically) or directly:
 
 ```bash
 pass-cli login

@@ -704,7 +704,7 @@ Item {
   // session.json) that makes `pass-cli login` fail immediately with
   // "non-existent session" and the floating terminal opens blank. Drop any
   // stale local state before login so the web flow can always start fresh.
-  function login() { launchTerminal("pass-cli logout --force >/dev/null 2>&1; pass-cli login") }
+  function login() { launchTerminal("pass-cli logout --force >/dev/null 2>&1; " + scriptDir + "/pass-login") }
 
   function unlock() { launchTerminal("pass-cli session unlock") }
 

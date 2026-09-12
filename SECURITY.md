@@ -33,6 +33,7 @@ plugin; each is declared and justified below.
 | `scripts/pass-cache-update` | Writes `~/.cache/ziouf.proton-pass/items.json` (mode `0600`): item ids, titles, vault names, types — **never secrets** |
 | `scripts/pass-pick`, `scripts/pass-autotype` | Read the cache; summon the Omarchy menu picker; fetch the selected item once (in-memory, capped) to build its action menu; `wtype` types into the focused window after a 3-second notice — secrets travel over stdin, never process arguments |
 | `scripts/pass-session-guard` | Polls the desktop lock state; runs `pass-cli session lock` on lock |
+| `scripts/pass-login` | Web login wrapper: watches `pass-cli login` output and opens the auth URL with `xdg-open`; passes stdin/stdout through untouched, forwards the exit code |
 | `scripts/install-services.sh`, `uninstall-services.sh` | `~/.config/systemd/user/proton-pass-*`, `~/.config/environment.d/90-proton-pass.conf`, `~/.cache/ziouf.proton-pass/` (uninstall only) |
 | `systemd/*.service`, `systemd/*.timer` | The three user units described above |
 
