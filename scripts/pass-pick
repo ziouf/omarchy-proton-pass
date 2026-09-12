@@ -91,7 +91,10 @@ if [[ -n "$updated_s" && $((now_s - updated_s)) -gt $STALE_SEC ]]; then
 fi
 
 # --- item picker ----------------------------------------------------------
-# labels.tsv: "<display label>\t<shareId>|<itemId>" (duplicates get " · N").
+# labels.tsv: "<glyph>\t<title>\t<vault · type>\t<shareId>|<itemId>".
+# The menu renders glyph + title + subtext as two-line rows; on selection it
+# returns "title\tsubtext" (glyph stripped), matched back to the ref below.
+# Duplicate titles in one vault get " · N" appended to the title.
 labels_tsv="$(mktemp)"
 sel_file="$(mktemp)"
 done_file="$(mktemp)"
@@ -108,14 +111,22 @@ jq -r \
       "credit_card": $l_card, "creditcard": $l_card, "identity": $l_identity,
       "ssh_key": $l_ssh, "sshkey": $l_ssh, "wifi": $l_wifi
     }[. // ""] // $l_other;
-  .items[] | [.title, (.itemType | typelabel), .vault, .shareId, .itemId] | @tsv
+  def typeglyph: # same set as typeIcon() in Pass.qml
+    { "login": "\uf090", "alias": "\uf0e0", "note": "\uf15c",
+      "credit_card": "\uf09d", "creditcard": "\uf09d", "identity": "\uf2bd",
+      "ssh_key": "\uf084", "sshkey": "\uf084", "wifi": "\uf1eb"
+    }[(. // "" | ascii_downcase)] // "\uf29c";
+  .items[]
+  | [(.itemType | typeglyph), .title,
+     ((.vault // "") + " · " + (.itemType | typelabel)),
+     ((.shareId // "") + "|" + (.itemId // ""))] | @tsv
   ' "$CACHE" \
-| awk -F'\t' '
+| awk -F'\t' 'BEGIN { OFS="\t" }
   {
-    label = $1 " · " $2 " — " $3
-    seen[label]++
-    if (seen[label] > 1) label = label " · " seen[label]
-    print label "\t" $4 "|" $5
+    key = $1 SUBSEP $2 SUBSEP $3
+    seen[key]++
+    if (seen[key] > 1) $2 = $2 " · " seen[key]
+    print $1, $2, $3, $4
   }' > "$labels_tsv"
 
 if [[ ! -s "$labels_tsv" ]]; then
@@ -124,7 +135,7 @@ if [[ ! -s "$labels_tsv" ]]; then
 fi
 
 choice=""
-labels_json="$(cut -f1 "$labels_tsv" | jq -R . | jq -s .)"
+labels_json="$(cut -f1-3 "$labels_tsv" | jq -R . | jq -s .)"
 : > "$sel_file" 2>/dev/null; : > "$done_file" 2>/dev/null
 plog "summon items (${#labels_tsv} bytes map)"
 summon_select "$prompt_items" "$labels_json" "$sel_file" "$done_file"
@@ -135,7 +146,7 @@ choice="$(wait_selection "$sel_file" "$done_file")"
 plog "choice='${choice:0:60}'"
 [[ -z "$choice" ]] && exit 0    # cancelled
 
-ref="$(awk -F'\t' -v c="$choice" '$1 == c { print $2; exit }' "$labels_tsv")"
+ref="$(awk -F'\t' -v c="$choice" '$2"\t"$3 == c { print $4; exit }' "$labels_tsv")"
 plog "ref=${ref:0:20}…"
 if [[ -z "$ref" ]]; then
   # Fallback for a stale cache hit: refresh in the background and give up.
@@ -153,7 +164,7 @@ item_json="$(timeout 25 pass-cli item view --output json "pass://$share_id/$item
 }
 plog "item fetched (${#item_json} bytes)"
 
-# field_map: "<action label>\t<action>" — only fields that actually exist.
+# field_map: "<glyph>\t<action label>\t<action>" — only fields that actually exist.
 # The typed payload (Login, Note, SshKey, …) is the first object entry of
 # item.content.content; extras are appended as copy actions (hidden ones
 # included, copy-only); "open the detail" is always available.
@@ -169,12 +180,12 @@ jq -r \
   | (($f.email // "") != "") as $hasE
   | (if $hasU then "username" elif $hasE then "email" else "" end) as $uidField
   | (if $uidField != "" then $f[$uidField] else "" end) as $uid
-  | (if $uid != "" then [$l_username, "copy:" + $uidField] else empty end),
-    (if (($f.password // "") != "") then [$l_password, "copy:password"] else empty end),
-    (if (($f.totp_uri // "") != "") then [$l_totp, "copy:totp"] else empty end),
-    (if (($f.urls // []) | length > 0) then [$l_url, "copy:url"], [$l_open, "open:url"] else empty end),
+  | (if $uid != "" then ["\uf007", $l_username, "copy:" + $uidField] else empty end),
+    (if (($f.password // "") != "") then ["\uf084", $l_password, "copy:password"] else empty end),
+    (if (($f.totp_uri // "") != "") then ["\uf017", $l_totp, "copy:totp"] else empty end),
+    (if (($f.urls // []) | length > 0) then ["\uf0c1", $l_url, "copy:url"], ["\uf08e", $l_open, "open:url"] else empty end),
     (if ($typeKey == "Login" and $uid != "" and (($f.password // "") != ""))
-       then [$l_autotype, "autotype"] else empty end)
+       then ["\uf11c", $l_autotype, "autotype"] else empty end)
   | @tsv' <<<"$item_json" > "$field_map"
 
 # Extra fields: one copy action each (hidden ones included, copy-only).
@@ -185,15 +196,16 @@ jq -r '
        then ([.[] | select(type == "string" and length > 0)][0] // "")
        else . end) as $v
   | select(($v // "") != "")
-  | [ ((if ((.type // "") == "hidden") then "• " else "" end) + (.label // .name // "field")),
+  | [ (if ((.type // "") == "hidden") then "\uf023" else "\uf0c5" end),
+      ((if ((.type // "") == "hidden") then "\u2022 " else "" end) + (.label // .name // "field")),
       "extra:" + (.label // .name // "field") ]
   | @tsv' <<<"$item_json" >> "$field_map"
 
-printf '%s\t%s\n' "$a_detail" "detail" >> "$field_map"
+printf '\uf05a\t%s\t%s\n' "$a_detail" "detail" >> "$field_map"
 plog "field map rows=$(wc -l < "$field_map")"
 
 # --- action picker --------------------------------------------------------
-fields_json="$(cut -f1 "$field_map" | jq -R . | jq -s .)"
+fields_json="$(cut -f1,2 "$field_map" | jq -R . | jq -s .)"
 : > "$sel_file" 2>/dev/null; : > "$done_file" 2>/dev/null
 plog "summon actions"
 summon_select "$prompt_field" "$fields_json" "$sel_file" "$done_file"
@@ -202,7 +214,7 @@ action="$(wait_selection "$sel_file" "$done_file")"
 plog "action='${action:0:60}'"
 [[ -z "$action" ]] && exit 0    # cancelled
 
-dispatch="$(awk -F'\t' -v c="$action" '$1 == c { print $2; exit }' "$field_map")"
+dispatch="$(awk -F'\t' -v c="$action" '$2 == c { print $3; exit }' "$field_map")"
 plog "dispatch='${dispatch:0:40}'"
 [[ -z "$dispatch" ]] && exit 0
 
