@@ -416,7 +416,7 @@ Panel {
                 text: root.breadcrumb()
                 color: root.foreground
                 font.family: root.fontFamily
-                font.pixelSize: Style.font.body
+                font.pixelSize: Style.font.heading
                 font.bold: true
                 elide: Text.ElideMiddle
               }
