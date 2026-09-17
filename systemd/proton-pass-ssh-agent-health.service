@@ -1,0 +1,8 @@
+[Unit]
+Description=Restart the Proton Pass SSH agent when it serves no keys
+
+[Service]
+Type=oneshot
+Environment=PROTON_PASS_LINUX_KEYRING=dbus
+Environment=SSH_AUTH_SOCK=%h/.ssh/proton-pass-agent.sock
+ExecStart=%h/.config/omarchy/plugins/ziouf.proton-pass/scripts/pass-ssh-agent-health

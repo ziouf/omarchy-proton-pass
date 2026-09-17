@@ -1,0 +1,10 @@
+[Unit]
+Description=Check the Proton Pass SSH agent periodically
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Persistent=false
+
+[Install]
+WantedBy=timers.target

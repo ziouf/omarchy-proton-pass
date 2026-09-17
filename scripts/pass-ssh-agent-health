@@ -1,0 +1,27 @@
+#!/bin/bash
+# pass-ssh-agent-health — restart a keyless agent when the session is healthy.
+#
+# The agent freezes its session at startup: started logged-out (boot before
+# login, screen lock, server-side invalidation), it stays green but serves
+# zero identities forever. When the session is valid again, the SSH vault
+# holds keys, and the agent serves none, restart it (only if it is running,
+# so a disabled unit stays disabled).
+
+set -u
+
+export PROTON_PASS_LINUX_KEYRING="${PROTON_PASS_LINUX_KEYRING:-dbus}"
+export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/proton-pass-agent.sock}"
+
+command -v pass-cli >/dev/null 2>&1 || exit 0
+command -v ssh-add >/dev/null 2>&1 || exit 0
+
+# No session (or locked): nothing to fix. Startup is gated by the agent's
+# ExecStartPre and a fresh login restarts the agent via pass-login.
+pass-cli info >/dev/null 2>&1 || exit 0
+
+systemctl --user is-active --quiet proton-pass-ssh-agent.service 2>/dev/null || exit 0
+
+pass-cli item list --vault-name SSH 2>/dev/null | grep -q 'state=Active' || exit 0
+if ssh-add -l 2>&1 | grep -qi 'no identities\|could not open'; then
+  systemctl --user try-restart proton-pass-ssh-agent.service >/dev/null 2>&1 || true
+fi

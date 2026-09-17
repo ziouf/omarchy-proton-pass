@@ -56,12 +56,12 @@ command -v pass-cli >/dev/null 2>&1 || {
 
 # ---------------------------------------------------------------- action list
 echo "Planned actions:"
-(( want_agent )) && echo "  → install systemd/proton-pass-ssh-agent.service"
+(( want_agent )) && { echo "  → install systemd/proton-pass-ssh-agent.service"; echo "  → install systemd/proton-pass-ssh-agent-health.{service,timer}"; }
 (( want_guard )) && echo "  → install systemd/proton-pass-session-guard.service"
 (( want_cache )) && { echo "  → install systemd/proton-pass-cache.service"; echo "  → install systemd/proton-pass-cache.timer"; }
 echo "  → export PROTON_PASS_LINUX_KEYRING=dbus + SSH_AUTH_SOCK (environment.d)"
 echo "  → systemctl --user daemon-reload"
-(( want_agent )) && echo "  → enable proton-pass-ssh-agent.service"
+(( want_agent )) && echo "  → enable proton-pass-ssh-agent.service + proton-pass-ssh-agent-health.timer"
 (( want_guard )) && echo "  → enable proton-pass-session-guard.service"
 (( want_cache )) && echo "  → enable proton-pass-cache.timer"
 
@@ -77,6 +77,7 @@ fi
 
 echo "Installing..."
 (( want_agent )) && install -Dm644 "$PLUGIN_DIR/systemd/proton-pass-ssh-agent.service"   "$SYSTEMD_DIR/proton-pass-ssh-agent.service"
+(( want_agent )) && { install -Dm644 "$PLUGIN_DIR/systemd/proton-pass-ssh-agent-health.service" "$SYSTEMD_DIR/proton-pass-ssh-agent-health.service"; install -Dm644 "$PLUGIN_DIR/systemd/proton-pass-ssh-agent-health.timer" "$SYSTEMD_DIR/proton-pass-ssh-agent-health.timer"; }
 (( want_guard )) && install -Dm644 "$PLUGIN_DIR/systemd/proton-pass-session-guard.service" "$SYSTEMD_DIR/proton-pass-session-guard.service"
 (( want_cache )) && { install -Dm644 "$PLUGIN_DIR/systemd/proton-pass-cache.service"   "$SYSTEMD_DIR/proton-pass-cache.service"; install -Dm644 "$PLUGIN_DIR/systemd/proton-pass-cache.timer"   "$SYSTEMD_DIR/proton-pass-cache.timer"; }
 
@@ -91,7 +92,7 @@ systemctl --user set-environment PROTON_PASS_LINUX_KEYRING=dbus
 
 systemctl --user daemon-reload
 
-(( want_agent )) && { systemctl --user enable --now proton-pass-ssh-agent.service; systemctl --user set-environment SSH_AUTH_SOCK="$HOME/.ssh/proton-pass-agent.sock"; }
+(( want_agent )) && { systemctl --user enable --now proton-pass-ssh-agent.service proton-pass-ssh-agent-health.timer; systemctl --user set-environment SSH_AUTH_SOCK="$HOME/.ssh/proton-pass-agent.sock"; }
 (( want_guard )) && systemctl --user enable --now proton-pass-session-guard.service
 (( want_cache )) && systemctl --user enable --now proton-pass-cache.timer
 

@@ -29,6 +29,8 @@ desktop lock.
   after a configurable delay.
 - **Optional system services**
   - `proton-pass-ssh-agent.service`: run pass-cli as your SSH agent
+    (keys from the `SSH` vault; restarts automatically after each login,
+    checked every 5 min by `proton-pass-ssh-agent-health.timer`)
   - `proton-pass-session-guard.service`: lock the pass-cli session whenever
     the Omarchy desktop locks
 - **Global picker (`pass-pick`)** — a fuzzy-search menu summonable from
@@ -210,6 +212,11 @@ omarchy-shell ziouf.proton-pass openItem <itemId>   # open the panel on an item'
 - **Picker results are stale** — the cache refreshes every 15 minutes
   (`proton-pass-cache.timer`) and refreshes in the background when older;
   force it with the command above.
+- **SSH agent serves no keys** (`ssh-add -l` → "no identities") — the agent
+  freezes its session at startup, so one started while logged out stays empty
+  even after login. Fixed automatically: every login restarts it and the
+  health timer checks every 5 min. Manual fix:
+  `systemctl --user restart proton-pass-ssh-agent.service`.
 - **SSH uses the wrong keys** — with `install-services.sh`, `SSH_AUTH_SOCK`
   points at the Proton Pass agent; import your local keys into a vault or
   remove `~/.config/environment.d/90-proton-pass.conf`.

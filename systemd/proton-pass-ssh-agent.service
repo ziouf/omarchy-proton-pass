@@ -6,7 +6,11 @@ Documentation=https://protonpass.github.io/pass-cli/commands/ssh-agent/
 # Keep the encryption key in the Secret Service so the session survives
 # reboots; the kernel keyring default is wiped at every boot.
 Environment=PROTON_PASS_LINUX_KEYRING=dbus
-ExecStart=/usr/bin/pass-cli ssh-agent start --socket-path %h/.ssh/proton-pass-agent.sock
+# Never start on a logged-out session: pass-cli freezes its session at
+# startup and its 30s refresh never recovers, leaving a green but keyless
+# agent. Failing here lets systemd retry with backoff until login happens.
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 24); do pass-cli info >/dev/null 2>&1 && exit 0; sleep 5; done; exit 1'
+ExecStart=/usr/bin/pass-cli ssh-agent start --socket-path %h/.ssh/proton-pass-agent.sock --vault-name SSH
 Restart=on-failure
 RestartSec=5
 

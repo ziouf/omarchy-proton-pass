@@ -36,7 +36,7 @@ done
 (( want_agent || want_guard || want_cache )) || { want_agent=1; want_guard=1; want_cache=1; }
 
 echo "Planned actions:"
-(( want_agent )) && echo "  → disable + remove proton-pass-ssh-agent.service (and env file)"
+(( want_agent )) && echo "  → disable + remove proton-pass-ssh-agent.service + health timer (and env file)"
 (( want_guard )) && echo "  → disable + remove proton-pass-session-guard.service"
 (( want_cache )) && { echo "  → disable + remove proton-pass-cache.{service,timer}"; echo "  → remove $CACHE_DIR"; }
 echo "  → systemctl --user daemon-reload"
@@ -52,7 +52,7 @@ if (( ! assume_yes )) && [[ -t 0 ]]; then
 fi
 
 echo "Uninstalling..."
-(( want_agent )) && { systemctl --user disable --now proton-pass-ssh-agent.service   2>/dev/null || true; rm -f "$SYSTEMD_DIR/proton-pass-ssh-agent.service";   rm -f "$ENV_FILE"; }
+(( want_agent )) && { systemctl --user disable --now proton-pass-ssh-agent.service proton-pass-ssh-agent-health.timer 2>/dev/null || true; rm -f "$SYSTEMD_DIR/proton-pass-ssh-agent.service"; rm -f "$SYSTEMD_DIR/proton-pass-ssh-agent-health.service"; rm -f "$SYSTEMD_DIR/proton-pass-ssh-agent-health.timer"; rm -f "$ENV_FILE"; }
 (( want_guard )) && { systemctl --user disable --now proton-pass-session-guard.service 2>/dev/null || true; rm -f "$SYSTEMD_DIR/proton-pass-session-guard.service"; }
 (( want_cache )) && { systemctl --user disable --now proton-pass-cache.timer         2>/dev/null || true; rm -f "$SYSTEMD_DIR/proton-pass-cache.service"; rm -f "$SYSTEMD_DIR/proton-pass-cache.timer"; rm -rf "$CACHE_DIR"; }
 systemctl --user daemon-reload

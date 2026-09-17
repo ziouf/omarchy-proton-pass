@@ -31,6 +31,12 @@ watcher=$!
 pass-cli login "$@" 2>&1 | tee "$log"
 rc="${PIPESTATUS[0]}"
 
+# A fresh login invalidates the session the SSH agent started on, and its
+# refresh never recovers — restart it so keys reload. Best effort only.
+if (( rc == 0 )) && command -v systemctl >/dev/null 2>&1; then
+  systemctl --user try-restart proton-pass-ssh-agent.service >/dev/null 2>&1 || true
+fi
+
 # Login is over: reap the watcher instead of leaving it on its timeout.
 pkill -P "$watcher" 2>/dev/null || true
 kill "$watcher" 2>/dev/null || true
