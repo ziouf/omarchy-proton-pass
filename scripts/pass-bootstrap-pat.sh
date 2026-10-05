@@ -67,6 +67,16 @@ mkdir -p "$cache"
 echo $(( $(date +%s) + secs )) > "$cache/pat-expires"
 rm -f "$cache/pat-warned"
 
+# Grant the PAT editor access to every vault. PAT sessions are scoped: a PAT
+# with no grants sees zero vaults, which breaks vault sync and the SSH agent.
+echo "Granting the PAT editor access to all vaults…"
+pass-cli vault list --output json 2>/dev/null \
+  | jq -r '.vaults[].name' 2>/dev/null \
+  | while IFS= read -r v; do
+      [ -n "$v" ] && pass-cli personal-access-token access grant \
+        --personal-access-token-name "$name" --vault-name "$v" --role editor >/dev/null 2>&1 || true
+    done
+
 if secret-tool lookup service proton-pass-pat >/dev/null 2>&1; then
   echo "PAT stored. The health timer will now revive the session automatically."
 else

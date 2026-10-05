@@ -32,6 +32,10 @@ fi
 if ! pass-cli info >/dev/null 2>&1; then
   pat="$(secret-tool lookup service proton-pass-pat 2>/dev/null)" || true
   [ -n "$pat" ] || exit 0
+  # Purge the local session blob first: a stale blob from a different login
+  # type (browser vs PAT) fails to decrypt (aead::Error) and blocks the
+  # re-login, so a fresh PAT session is created from scratch.
+  rm -rf "$HOME/.local/share/proton-pass-cli/.session" 2>/dev/null || true
   pass-cli login --pat "$pat" >/dev/null 2>&1 || exit 0
 fi
 
