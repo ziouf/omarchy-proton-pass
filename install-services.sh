@@ -96,6 +96,20 @@ systemctl --user daemon-reload
 (( want_guard )) && systemctl --user enable --now proton-pass-session-guard.service
 (( want_cache )) && systemctl --user enable --now proton-pass-cache.timer
 
+# The perpetual keepalive needs a stored PAT (one-time interactive browser
+# login). Without it the health timer cannot revive a dead session.
+if (( want_agent )) && ! secret-tool lookup service proton-pass-pat >/dev/null 2>&1; then
+  if [[ -t 0 ]]; then
+    echo
+    echo "Setting up the perpetual keepalive (one-time browser login)…"
+    "$PLUGIN_DIR/scripts/pass-bootstrap-pat.sh" \
+      || echo "Bootstrap skipped — run '$PLUGIN_DIR/scripts/pass-bootstrap-pat.sh' later to enable auto re-login."
+  else
+    echo
+    echo "NOTE: run '$PLUGIN_DIR/scripts/pass-bootstrap-pat.sh' to enable the perpetual keepalive (one-time browser login)."
+  fi
+fi
+
 echo
 echo "Done. Components installed:"
 (( want_agent )) && echo "  - proton-pass-ssh-agent.service    (SSH agent on ~/.ssh/proton-pass-agent.sock)"

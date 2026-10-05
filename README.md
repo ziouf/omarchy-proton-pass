@@ -30,7 +30,9 @@ desktop lock.
 - **Optional system services**
   - `proton-pass-ssh-agent.service`: run pass-cli as your SSH agent
     (keys from the `SSH` vault; restarts automatically after each login,
-    checked every 5 min by `proton-pass-ssh-agent-health.timer`)
+    checked every 5 min by `proton-pass-ssh-agent-health.timer`, which also
+    re-logs-in via a stored PAT so a dead session self-heals — see
+    Troubleshooting)
   - `proton-pass-session-guard.service`: lock the pass-cli session whenever
     the Omarchy desktop locks
 - **Global picker (`pass-pick`)** — a fuzzy-search menu summonable from
@@ -110,6 +112,13 @@ SSH keys stored in your Proton Pass vaults.
 
 > Import existing keys so ssh keeps working:
 > `pass-cli item create ssh-key import --from-private-key ~/.ssh/id_ed25519 --title "$(hostname)"`
+
+With the SSH agent, the install also bootstraps the **perpetual keepalive**: it
+runs `scripts/pass-bootstrap-pat.sh`, which opens a browser login once,
+creates a personal access token (1-year expiry) and stores it in the login
+keyring. The health timer then revives the session automatically whenever it
+dies, with no browser. Re-run it any time with
+`~/.config/omarchy/plugins/ziouf.proton-pass/scripts/pass-bootstrap-pat.sh`.
 
 ### Global keybinding
 
@@ -243,6 +252,22 @@ omarchy-shell ziouf.proton-pass openItem <itemId>   # open the panel on an item'
    the panel terminal flow, the menu entries, and each systemd unit, so only
    out-of-band manual invocations are at risk. The symptom is a session that
    cannot stay connected even though login itself succeeds.
+ - **Session dies and does not come back on its own** — pass-cli's 30s refresh
+   only extends a *live* session; a dead one (TTL, server-side invalidation)
+   needs a full login, and `login` is interactive by default. To make it
+    self-heal hands-off, store a Personal Access Token in the Secret Service;
+    the health timer then re-logs-in with it (`pass-cli login --pat`, no
+    browser) within 5 min of the session dropping. Run the bootstrap once
+    (opens a browser login, creates a 1-year PAT, stores it in the keyring):
+    ```
+    ~/.config/omarchy/plugins/ziouf.proton-pass/scripts/pass-bootstrap-pat.sh
+    ```
+    Max PAT lifetime is 1 year. It cannot be renewed from a PAT session
+    (pass-cli forbids acting on tokens while logged in with one), so the
+    health timer warns ~7 days before expiry and you re-run the bootstrap
+    (one browser login) to mint a fresh PAT. This is the closest pass-cli
+    allows to a perpetual session; the session guard (lock-on-screen-lock) is
+    the opposite of hands-off, so leave it disabled if you want zero prompts.
 
 
 ## Settings

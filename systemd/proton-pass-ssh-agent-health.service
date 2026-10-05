@@ -1,5 +1,5 @@
 [Unit]
-Description=Restart the Proton Pass SSH agent when it serves no keys
+Description=Keep the Proton Pass session and SSH agent alive (PAT re-login + key reload)
 
 [Service]
 Type=oneshot

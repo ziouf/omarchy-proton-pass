@@ -1,3 +1,9 @@
 *.log
 *.tmp
 .DS_Store
+
+# Graphify (artefacts locaux de knowledge graph)
+graphify-out/
+
+# opencode (session locale)
+.opencode/

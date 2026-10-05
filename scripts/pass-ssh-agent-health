@@ -1,11 +1,13 @@
 #!/bin/bash
-# pass-ssh-agent-health — restart a keyless agent when the session is healthy.
+# pass-ssh-agent-health — keep the Proton Pass session and SSH agent alive.
 #
-# The agent freezes its session at startup: started logged-out (boot before
-# login, screen lock, server-side invalidation), it stays green but serves
-# zero identities forever. When the session is valid again, the SSH vault
-# holds keys, and the agent serves none, restart it (only if it is running,
-# so a disabled unit stays disabled).
+# pass-cli's own 30s refresh only extends a LIVE session; once it dies (TTL,
+# server-side invalidation) nothing brings it back on its own and the agent
+# spins on "No active session" serving zero keys. When a PAT is stored in the
+# Secret Service, re-login with it (non-interactive) so the session returns,
+# then restart the agent onto it. Without a stored PAT this is a no-op and the
+# script behaves exactly as before: restart a keyless agent when the session
+# is healthy again.
 
 set -u
 
@@ -15,9 +17,23 @@ export SSH_AUTH_SOCK="${SSH_AUTH_SOCK:-$HOME/.ssh/proton-pass-agent.sock}"
 command -v pass-cli >/dev/null 2>&1 || exit 0
 command -v ssh-add >/dev/null 2>&1 || exit 0
 
-# No session (or locked): nothing to fix. Startup is gated by the agent's
-# ExecStartPre and a fresh login restarts the agent via pass-login.
-pass-cli info >/dev/null 2>&1 || exit 0
+# PAT expiry reminder: pass-cli forbids renewing a PAT from a PAT session, so
+# renewal is a one-time browser re-bootstrap (pass-bootstrap-pat.sh). Warn
+# ~7 days ahead of the stored expiry, once per cycle.
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/ziouf.proton-pass"
+exp="$(cat "$cache/pat-expires" 2>/dev/null)" || exp=""
+if [[ "$exp" =~ ^[0-9]+$ ]] && [ "$(date +%s)" -ge $(( exp - 604800 )) ] && [ ! -f "$cache/pat-warned" ]; then
+  notify-send "Proton Pass" "Personal access token expiring soon — re-run pass-bootstrap-pat.sh (browser login) to renew." >/dev/null 2>&1 || true
+  touch "$cache/pat-warned" 2>/dev/null || true
+fi
+
+# Session gone: re-establish it from the stored PAT (non-interactive), then
+# fall through so the agent restarts onto the fresh session. No PAT -> no-op.
+if ! pass-cli info >/dev/null 2>&1; then
+  pat="$(secret-tool lookup service proton-pass-pat 2>/dev/null)" || true
+  [ -n "$pat" ] || exit 0
+  pass-cli login --pat "$pat" >/dev/null 2>&1 || exit 0
+fi
 
 systemctl --user is-active --quiet proton-pass-ssh-agent.service 2>/dev/null || exit 0
 

@@ -11,16 +11,19 @@ plugin; each is declared and justified below.
 |---|---|---|
 | `package-manager` | `README.md` and `install-services.sh` mention `yay` / `pacman` | **Documentation only.** The plugin never invokes a package manager. `proton-pass-cli` is a prerequisite the **user installs themselves**; the scripts only print a pointer to the README when it is missing. |
 | `installer` | `install-services.sh`, `uninstall-services.sh` | **True by nature, user-scope by design.** Two optional scripts that copy unit files into `~/.config/systemd/user/`, write one `environment.d` file, and toggle the matching user units. Both refuse to run as root, support `--dry-run`, and act only on components selected via flags. |
-| `service-management` | `systemctl --user` calls and bundled unit files | **True and intentional.** Four user units: `proton-pass-ssh-agent.service` (pass-cli as SSH agent, `SSH` vault only, gated on a valid session), `proton-pass-ssh-agent-health.service` + `.timer` (restarts a keyless agent when the session is healthy again), `proton-pass-session-guard.service` (locks the pass-cli session when the desktop locks), `proton-pass-cache.service` + `.timer` (metadata refresh). Everything is `systemctl --user`; nothing touches the system bus or other services. `pass-login` also `try-restart`s the SSH agent after a successful login, so fresh sessions reload keys. |
+| `service-management` | `systemctl --user` calls and bundled unit files | **True and intentional.** Four user units: `proton-pass-ssh-agent.service` (pass-cli as SSH agent, `SSH` vault only, gated on a valid session), `proton-pass-ssh-agent-health.service` + `.timer` (re-logs-in via a stored PAT
+when the session has died, then restarts a keyless agent when the session is
+healthy again), `proton-pass-session-guard.service` (locks the pass-cli session when the desktop locks), `proton-pass-cache.service` + `.timer` (metadata refresh). Everything is `systemctl --user`; nothing touches the system bus or other services. `pass-login` also `try-restart`s the SSH agent after a successful login, so fresh sessions reload keys. |
 
 ## What this plugin never does
 
 - Never runs `sudo`, `pkexec`, or anything as root
 - Never installs, upgrades, or removes a package
 - Never downloads or executes remote code (no `curl | bash`)
-- Never writes secrets to disk — secret storage belongs to pass-cli's own
-  encrypted store; clipboard values transit through a `0600` tmpfs buffer
-  that is shredded immediately after the copy
+- Never writes secrets to disk itself — secret storage belongs to pass-cli's
+  own encrypted store and, for the optional keep-alive PAT, the Secret Service
+  (the plugin only reads it back via `secret-tool`); clipboard values transit
+  through a `0600` tmpfs buffer that is shredded immediately after the copy
 - Never sends telemetry; the only network traffic is pass-cli talking to
   Proton's API
 
